@@ -1,0 +1,19 @@
+# Environment & Cache
+venv/
+env/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Dokumen & Bahan Riset Internal (Tidak perlu di-upload ke Space publik)
+*.docx
+*.pdf
+extracted_images/
+extracted_paper_text.txt
+generate_full_blueprint.py
+build_blueprint_doc.py
+test_style.py
+test.docx
+test_style.docx
+check_encoder.py
+extract_img.py
