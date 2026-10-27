@@ -17,3 +17,8 @@ test.docx
 test_style.docx
 check_encoder.py
 extract_img.py
+
+# Secrets & API Keys (JANGAN PERNAH DI-COMMIT)
+.env
+.streamlit/secrets.toml
+secrets.toml
