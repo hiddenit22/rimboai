@@ -209,6 +209,36 @@ def get_disease_details(label: str) -> dict:
         return DISEASE_DB["leafcurl"]
     if "tomatobacterial" in clean or "bacterialspot" in clean:
         return DISEASE_DB["tomatobacterialspot"]
+    if "radish" in clean and "spot" in clean:
+        return {
+            "nama_id": "Bercak Daun Hitam Lobak (Radish Black Leaf Spot)",
+            "penyebab": "Jamur patogen daun (Alternaria brassicae)",
+            "gejala": "Bercak melingkar cokelat gelap hingga kehitaman dengan pola cincin konsentris khas pada daun lobak.",
+            "penanganan": [
+                "Pangkas daun yang terinfeksi dan bersihkan gulma di sekitar tanaman lobak.",
+                "Semprot fungisida protektif berbahan aktif Mankozeb atau Propineb."
+            ]
+        }
+    if "radish" in clean and ("downy" in clean or "downey" in clean):
+        return {
+            "nama_id": "Embun Bulu Lobak (Radish Downy Mildew)",
+            "penyebab": "Jamur semu Oomycetes (Peronospora parasitica)",
+            "gejala": "Bercak kuning bersudut di permukaan atas dan lapisan kapang putih kelabu di bawah daun lobak.",
+            "penanganan": [
+                "Perlebar jarak tanam untuk sirkulasi udara optimal dan kurangi kelembapan.",
+                "Semprotkan fungisida khusus Oomycetes berbahan aktif Simoksanil atau Dimetomorf."
+            ]
+        }
+    if "radish" in clean and "mosaic" in clean:
+        return {
+            "nama_id": "Virus Mosaik Lobak (Radish Mosaic Virus)",
+            "penyebab": "Radish Mosaic Virus (RaMV) ditularkan oleh kutu daun Aphid",
+            "gejala": "Daun lobak belang-belang hijau kekuningan, permukaan daun berkerut dan tanaman kerdil.",
+            "penanganan": [
+                "Kendalikan vektor kutu daun menggunakan insektisida nabati atau Imidakloprid.",
+                "Eradikasi tanaman yang terinfeksi parah sejak dini."
+            ]
+        }
     if "septoria" in clean:
         return DISEASE_DB["septoria"]
     if "fleabeetle" in clean:

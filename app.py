@@ -725,6 +725,23 @@ DEFAULT_DISEASES = [
     "Tomato leaf curl virus", "Tomato spotted wilt"
 ]
 
+PLANT_TRANSLATION = {
+    "bean": "Buncis",
+    "betel leaf": "Daun Sirih",
+    "bitter gourd": "Pare",
+    "bottle gourd": "Labu Air",
+    "cauliflower": "Kembang Kol",
+    "cowpea": "Kacang Panjang",
+    "cucumber": "Mentimun",
+    "eggplant": "Terong",
+    "radish": "Lobak",
+    "tomato": "Tomat"
+}
+
+def get_plant_name_id(eng_name: str) -> str:
+    key = str(eng_name).strip().lower()
+    return PLANT_TRANSLATION.get(key, eng_name)
+
 def preprocess_pil(img: Image.Image, img_size=(224,224)) -> np.ndarray:
     img = img.convert("RGB").resize(img_size, Image.BILINEAR)
     return (np.asarray(img).astype("float32") / 255.0)
@@ -1069,8 +1086,11 @@ for up_file, up_name in images_to_process:
     p_conf = p_probs[0][p_idx] * 100
     d_conf = d_probs[0][d_idx] * 100
     is_healthy = "healthy" in d_lbl.lower()
+    p_name_id = get_plant_name_id(p_lbl)
+    d_info = get_disease_details(d_lbl)
+    d_name_id = d_info.get("nama_id", d_lbl)
 
-    # Kartu Hasil Diagnosa (Mobile Layout) — Tanpa batasan akurasi
+    # Kartu Hasil Diagnosa (Mobile Layout) — Dilengkapi Nama Bahasa Indonesia
     st.markdown(f"""
     <div class="result-card">
         <div class="result-top">
@@ -1081,14 +1101,16 @@ for up_file, up_name in images_to_process:
             <div class="result-metrics">
                 <div class="metric-cell">
                     <div class="cell-label">Varietas Tanaman</div>
-                    <div class="cell-val">{p_lbl}</div>
+                    <div class="cell-val">{p_name_id}</div>
+                    <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{p_lbl}</i></div>
                     <span class="cell-pill pill-green">
                         Akurasi: {p_conf:.1f}%
                     </span>
                 </div>
                 <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
                     <div class="cell-label">Diagnosa Patogen</div>
-                    <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'};">{d_lbl}</div>
+                    <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_name_id}</div>
+                    <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{d_lbl}</i></div>
                     <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
                         {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • {d_conf:.1f}%
                     </span>
@@ -1099,7 +1121,6 @@ for up_file, up_name in images_to_process:
     """, unsafe_allow_html=True)
 
     # Protokol Resep Pengendalian Fitopatologi
-    d_info = get_disease_details(d_lbl)
     rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
 
     st.markdown(f"""
@@ -1165,11 +1186,14 @@ for up_file, up_name in images_to_process:
         with c1:
             st.markdown("**Komoditas Tanaman**")
             for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
-                st.progress(p, text=f"{lbl}: {p*100:.1f}%")
+                id_name = get_plant_name_id(lbl)
+                st.progress(p, text=f"{id_name} ({lbl}): {p*100:.1f}%")
         with c2:
             st.markdown("**Dugaan Penyakit**")
             for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
-                st.progress(p, text=f"{lbl}: {p*100:.1f}%")
+                d_detail = get_disease_details(lbl)
+                d_id = d_detail.get('nama_id', lbl)
+                st.progress(p, text=f"{d_id}: {p*100:.1f}%")
 
     st.markdown("---")
 
