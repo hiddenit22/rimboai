@@ -1413,7 +1413,33 @@ st.markdown("""
 gemini_key = get_gemini_api_key()
 
 if not gemini_key:
-    st.info("💡 **Tips Verifikasi:** Untuk mengaktifkan ulasan pakar visual multimodal (Gemini), masukkan API Key pada sidebar atau daftarkan di Streamlit Secrets.")
+    st.markdown("""
+    <div style="background:#eff6ff; border:1.5px solid #93c5fd; padding:12px; margin-bottom:10px;">
+        <div style="font-weight:800; color:#1e40af; font-size:0.84rem; margin-bottom:4px;">
+            🔑 Aktivasi Fitur Pakar Multimodal Gemini Vision
+        </div>
+        <div style="color:#334155; font-size:0.78rem; line-height:1.45; margin-bottom:8px;">
+            API Key belum terdeteksi di Streamlit Cloud Secrets. Tempelkan kunci API Anda di bawah ini untuk langsung membuka tombol analisis pakar:
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    c_in1, c_in2 = st.columns([2.2, 1])
+    with c_in1:
+        temp_key = st.text_input(
+            "Gemini API Key:",
+            type="password",
+            key="inline_gemini_input",
+            placeholder="Tempel AQ.Ab8... di sini",
+            label_visibility="collapsed"
+        )
+    with c_in2:
+        if st.button("Aktifkan Kunci", key="btn_activate_inline", use_container_width=True):
+            if temp_key and temp_key.strip():
+                st.session_state["gemini_user_key"] = temp_key.strip()
+                st.rerun()
+            else:
+                st.warning("Silakan tempel API key terlebih dahulu.")
+    st.caption("💡 *Tips: Kunci Anda tersimpan aman di sesi browser ini. Untuk aktif permanen tanpa input ulang, daftarkan di dashboard Streamlit Cloud (Settings ➜ Secrets).*")
 else:
     c_btn, c_note = st.columns([1.6, 1])
     with c_btn:
