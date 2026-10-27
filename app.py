@@ -299,10 +299,12 @@ with st.sidebar:
     st.markdown("---")
     st.caption("🤖 **Model:** NasNetMobile Dual-Head  \n🔬 **XAI:** Eigen-CAM (Class-agnostic)")
 
-# ---------- pilihan input: Kamera Smartphone vs Galeri ----------
+# ---------- pilihan input: Upload Berkas (Default) vs Kamera Smartphone ----------
+st.markdown("##### 📥 Sumber Foto Daun:")
 input_source = st.radio(
     "Pilih Sumber Foto:",
-    ["📷 Kamera Smartphone Langsung", "📁 Galeri / Upload Berkas"],
+    ["📁 Upload Berkas / Galeri", "📷 Kamera Smartphone Langsung"],
+    index=0,
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -310,13 +312,13 @@ input_source = st.radio(
 images_to_process = []
 
 if "Kamera" in input_source:
-    st.caption("👉 Arahkan kamera smartphone Anda ke daun tanaman, lalu tekan tombol foto.")
+    st.caption("👉 Arahkan kamera smartphone ke daun tanaman, lalu tekan tombol foto.")
     cam_file = st.camera_input("Arahkan kamera ke daun tanaman", label_visibility="collapsed")
     if cam_file is not None:
         images_to_process.append((cam_file, "Foto Kamera"))
 else:
     uploaded_files = st.file_uploader(
-        "Pilih foto daun dari galeri:",
+        "Pilih atau seret foto daun dari perangkat (JPG, JPEG, PNG):",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True
     )
@@ -325,7 +327,7 @@ else:
             images_to_process.append((f, f.name))
 
 if not images_to_process:
-    st.info("💡 Silakan ambil foto langsung dengan kamera atau pilih dari galeri untuk memulai diagnosa.")
+    st.info("💡 Silakan unggah foto daun atau beralih ke opsi Kamera Smartphone untuk memulai diagnosa.")
     st.stop()
 
 # ---------- proses tiap gambar ----------
