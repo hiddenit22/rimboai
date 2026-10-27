@@ -36,8 +36,13 @@ st.markdown("""
         box-sizing: border-box;
     }
 
-    html, body, [class*="css"], .stMarkdown, .stText, p, span, div, label {
+    html, body, .stApp, p, label, .sec-title, .brand-name, .brand-sub, .step-head, .step-text, .crop-box, .cell-label, .cell-val, .rx-val, .rx-header {
         font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    }
+
+    /* Protect Material Symbols icons used by Streamlit from font override */
+    [data-testid="stIconMaterial"], .material-symbols-rounded, .material-icons, [class*="material-symbols"] {
+        font-family: 'Material Symbols Rounded', 'Material Icons' !important;
     }
 
     /* Bright light canvas */
@@ -493,6 +498,59 @@ st.markdown("""
         border: 1.5px solid #cbd5e1 !important;
     }
 
+    /* Clean Square Guide Accordion (Zero Broken Ligatures) */
+    .guide-accordion {
+        background: #ffffff;
+        border: 1.5px solid #cbd5e1;
+        margin-bottom: 20px;
+    }
+    .guide-summary {
+        padding: 10px 14px;
+        font-size: 0.8rem;
+        font-weight: 800;
+        color: #0f172a;
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #ffffff;
+        border-left: 3px solid #16a34a;
+        user-select: none;
+    }
+    .guide-summary::-webkit-details-marker {
+        display: none;
+    }
+    .guide-chevron {
+        font-size: 0.85rem;
+        color: #16a34a;
+        font-weight: 900;
+        transition: transform 0.2s ease;
+    }
+    .guide-accordion[open] .guide-chevron {
+        transform: rotate(180deg);
+    }
+    .guide-body {
+        padding: 12px 14px;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
+    }
+    .guide-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 0.8rem;
+        color: #334155;
+        line-height: 1.45;
+        margin-bottom: 6px;
+    }
+    .guide-bullet {
+        color: #16a34a;
+        font-size: 0.72rem;
+        margin-top: 1px;
+        flex-shrink: 0;
+    }
+
     /* Footer */
     .app-footer {
         text-align: center;
@@ -777,18 +835,23 @@ if not images_to_process:
     </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("💡 Petunjuk Pemotretan Daun yang Optimal", expanded=False):
-        st.markdown("""
-        * **Fokus Pada Bercak:** Posisikan bercak atau daun sakit di bagian tengah frame kamera.
-        * **Pencahayaan Terang:** Ambil foto di bawah cahaya alami yang cukup terang.
-        * **Jarak Ideal:** Pertahankan jarak 15–30 cm antara lensa kamera dan helai daun.
-        * **Hindari Blur:** Pastikan kamera fokus sebelum mengambil foto.
-        """)
-
     st.markdown("""
+    <details class="guide-accordion">
+        <summary class="guide-summary">
+            <span>💡 PETUNJUK PEMOTRETAN DAUN YANG OPTIMAL</span>
+            <span class="guide-chevron">▾</span>
+        </summary>
+        <div class="guide-body">
+            <div class="guide-row"><span class="guide-bullet">■</span><span><b>Fokus Pada Bercak:</b> Posisikan bercak atau daun sakit di bagian tengah frame kamera.</span></div>
+            <div class="guide-row"><span class="guide-bullet">■</span><span><b>Pencahayaan Terang:</b> Ambil foto di bawah cahaya alami yang cukup terang.</span></div>
+            <div class="guide-row"><span class="guide-bullet">■</span><span><b>Jarak Ideal:</b> Pertahankan jarak 15–30 cm antara lensa kamera dan helai daun.</span></div>
+            <div class="guide-row"><span class="guide-bullet">■</span><span><b>Hindari Blur:</b> Pastikan kamera fokus sebelum mengambil foto.</span></div>
+        </div>
+    </details>
+
     <div class="app-footer">
         <b>RimboAI</b> • Platform Diagnosa Kesehatan Tanaman & Explainable AI<br>
-        <i>Copyright © 2026 Dede Fauzi, M.Kom. All rights reserved.</i>
+        <i>Copyright © 2026 Dede Fauzi, M.Kom, Mahmud Isnan, M.Eng. All rights reserved.</i>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
@@ -919,6 +982,6 @@ for up_file, up_name in images_to_process:
 st.markdown("""
 <div class="app-footer">
     <b>RimboAI</b> • Platform Diagnosa Kesehatan Tanaman & Explainable AI<br>
-    <i>Copyright © 2026 Dede Fauzi, M.Kom. All rights reserved.</i>
+    <i>Copyright © 2026 Dede Fauzi, M.Kom, Mahmud Isnan, M.Eng. All rights reserved.</i>
 </div>
 """, unsafe_allow_html=True)
