@@ -1099,7 +1099,6 @@ Format Jawaban (Tuliskan langsung dalam format rapi ini):
             "gemini-flash-latest",
             "gemini-3.5-flash-lite"
         ]
-        last_err = ""
         
         for model_name in candidate_models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
@@ -1114,19 +1113,16 @@ Format Jawaban (Tuliskan langsung dalam format rapi ini):
                             if text:
                                 return True, text
                     elif res.status_code == 503:
-                        last_err = f"{model_name} (HTTP 503 Beban Server)"
                         time.sleep(1.2)
                         continue
                     else:
-                        last_err = f"{model_name} (HTTP {res.status_code}): {res.text[:100]}"
                         break
-                except Exception as e_sub:
-                    last_err = str(e_sub)
+                except Exception:
                     break
                 
-        return False, f"Server Gemini sedang mengalami lonjakan beban sesaat ({last_err}). Silakan tekan tombol sekali lagi dalam beberapa detik."
-    except Exception as ex:
-        return False, f"Terjadi kesalahan saat memproses gambar: {str(ex)}"
+        return False, "Maaf sedang gangguan layanan, coba lagi nanti"
+    except Exception:
+        return False, "Maaf sedang gangguan layanan, coba lagi nanti"
 
 # ---------- Cache: Load Model & Encoders Sekali ----------
 @st.cache_resource(show_spinner=False)
@@ -1182,17 +1178,17 @@ with st.sidebar:
     st.markdown("---")
     st.caption("🤖 **Arsitektur:** NasNetMobile Dual-Head  \n🔬 **Metode XAI:** Eigen-CAM (SVD Activation)  \n🌱 **Cakupan:** 10 Tanaman & 24 Patogen")
     st.markdown("---")
-    st.markdown("### 🧠 Pakar Multimodal (Gemini)")
+    st.markdown("### 🩺 Layanan Verifikasi Pakar")
     active_key = get_gemini_api_key()
     if active_key:
-        masked = active_key[:6] + "..." + active_key[-4:] if len(active_key) > 10 else "Tersedia"
-        st.success(f"● Gemini Terhubung ({masked})")
+        masked = active_key[:6] + "..." + active_key[-4:] if len(active_key) > 10 else "Aktif"
+        st.success(f"● Layanan Pakar Aktif ({masked})")
     else:
         st.text_input(
-            "Gemini API Key (Opsional)",
+            "Kunci Akses Pakar (Opsional)",
             type="password",
             key="gemini_user_key",
-            help="Masukkan API key dari Google AI Studio jika belum disetting di secrets."
+            help="Masukkan kunci akses jika belum disetting di secrets."
         )
 
 # ---------- State Management Foto Tunggal & Reset Uploader ----------
@@ -1416,11 +1412,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------- Verifikasi Multimodal AI (Second Opinion Pakar) ----------
+# ---------- Verifikasi Pakar (Second Opinion) ----------
 st.markdown("""
 <div class="sec-header">
     <div class="sec-bar" style="background:#2563eb;"></div>
-    <div class="sec-title">Pakar Multimodal AI (Second Opinion)</div>
+    <div class="sec-title">Verifikasi Pakar (Second Opinion)</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1430,20 +1426,20 @@ if not gemini_key:
     st.markdown("""
     <div style="background:#eff6ff; border:1.5px solid #93c5fd; padding:12px; margin-bottom:10px;">
         <div style="font-weight:800; color:#1e40af; font-size:0.84rem; margin-bottom:4px;">
-            🔑 Aktivasi Fitur Pakar Multimodal Gemini Vision
+            🔑 Aktivasi Layanan Verifikasi Pakar
         </div>
         <div style="color:#334155; font-size:0.78rem; line-height:1.45; margin-bottom:8px;">
-            API Key belum terdeteksi di Streamlit Cloud Secrets. Tempelkan kunci API Anda di bawah ini untuk langsung membuka tombol analisis pakar:
+            Kunci akses belum terdeteksi di Secrets. Tempelkan kunci akses di bawah ini untuk mengaktifkan ulasan pakar:
         </div>
     </div>
     """, unsafe_allow_html=True)
     c_in1, c_in2 = st.columns([2.2, 1])
     with c_in1:
         temp_key = st.text_input(
-            "Gemini API Key:",
+            "Kunci Akses Layanan:",
             type="password",
             key="inline_gemini_input",
-            placeholder="Tempel AQ.Ab8... di sini",
+            placeholder="Tempel kunci akses di sini...",
             label_visibility="collapsed"
         )
     with c_in2:
@@ -1452,17 +1448,17 @@ if not gemini_key:
                 st.session_state["gemini_user_key"] = temp_key.strip()
                 st.rerun()
             else:
-                st.warning("Silakan tempel API key terlebih dahulu.")
+                st.warning("Silakan tempel kunci akses terlebih dahulu.")
     st.caption("💡 *Tips: Kunci Anda tersimpan aman di sesi browser ini. Untuk aktif permanen tanpa input ulang, daftarkan di dashboard Streamlit Cloud (Settings ➜ Secrets).*")
 else:
     c_btn, c_note = st.columns([1.6, 1])
     with c_btn:
-        btn_gemini = st.button("🧠 Minta Verifikasi Pakar AI (Gemini)", key="btn_run_gemini", use_container_width=True)
+        btn_gemini = st.button("🩺 Minta Verifikasi Pakar (Second Opinion)", key="btn_run_gemini", use_container_width=True)
     with c_note:
-        st.caption("✨ Menganalisis morfologi bercak daun untuk memvalidasi diagnosa CNN.")
+        st.caption("✨ Menganalisis morfologi bercak daun untuk memvalidasi diagnosa patologi.")
 
     if btn_gemini:
-        with st.spinner("Mengirimkan citra daun & data prediksi ke Gemini Vision..."):
+        with st.spinner("Menghubungi layanan analisis pakar fitopatologi..."):
             top_p_list = topk_list(p_probs[0], plant_labels, k=4)
             top_d_list = topk_list(d_probs[0], disease_labels, k=4)
             ok, response_text = verify_with_gemini(
@@ -1477,7 +1473,7 @@ if st.session_state.get("gemini_result"):
     st.markdown("""
     <div class="gemini-card">
         <div class="gemini-header">
-            <div class="gemini-title">🧠 HASIL VERIFIKASI PAKAR MULTIMODAL AI (GEMINI)</div>
+            <div class="gemini-title">🩺 HASIL VERIFIKASI PAKAR (SECOND OPINION)</div>
             <div class="gemini-badge">● TERVERIFIKASI</div>
         </div>
         <div class="gemini-body">
