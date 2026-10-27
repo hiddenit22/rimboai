@@ -17,8 +17,97 @@ PLANT_PKL_PATH   = os.path.join(BASE_DIR, "Encoder", "plant_encoder.pkl")
 DISEASE_PKL_PATH = os.path.join(BASE_DIR, "Encoder", "disease_encoder.pkl")
 # =====================================================================
 
-st.set_page_config(page_title="Plant & Disease — EigenCAM", layout="centered")
-st.title("🌿 Plant & Disease (NasNet) — EigenCAM Prototype")
+st.set_page_config(
+    page_title="Rimbo AI — Plant & Disease Diagnosis",
+    page_icon="🌿",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# Custom CSS agar tampilan smartphone responsif, rapi, dan modern
+st.markdown("""
+<style>
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 2rem;
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+        max-width: 720px;
+    }
+    .main-header {
+        text-align: center;
+        margin-bottom: 1.2rem;
+    }
+    .main-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #166534;
+        margin-bottom: 4px;
+    }
+    .main-subtitle {
+        font-size: 0.9rem;
+        color: #4b5563;
+        margin-bottom: 8px;
+    }
+    .diagnosis-card {
+        background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+        border: 1.5px solid #86efac;
+        border-radius: 14px;
+        padding: 16px;
+        margin: 14px 0;
+        box-shadow: 0 4px 12px rgba(22, 101, 52, 0.08);
+    }
+    .diagnosis-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px dashed #bbf7d0;
+    }
+    .diagnosis-item:last-child {
+        border-bottom: none;
+    }
+    .diag-label {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .diag-val {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #15803d;
+    }
+    .diag-badge {
+        font-size: 0.8rem;
+        font-weight: 600;
+        background-color: #dcfce7;
+        color: #166534;
+        padding: 2px 8px;
+        border-radius: 12px;
+        margin-left: 6px;
+    }
+    div[data-testid="stCameraInput"] {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding-top: 8px;
+        padding-bottom: 8px;
+        font-weight: 600;
+        font-size: 0.88rem;
+    }
+    button {
+        border-radius: 10px !important;
+    }
+</style>
+<div class="main-header">
+    <div class="main-title">🌿 Rimbo AI — Plant & Disease</div>
+    <div class="main-subtitle">Diagnosa Cerdas Tanaman & Penyakit Daun + Visualisasi XAI</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------- util umum ----------
 DEFAULT_PLANTS = ["Bean","Betel Leaf","Bitter Gourd","Bottle gourd","Cauliflower",
@@ -175,27 +264,51 @@ if len(model.outputs) != 2:
     st.error(f"Model ini memiliki {len(model.outputs)} output; app ini mengharapkan 2 (plant & disease).")
     st.stop()
 
-# ---------- sidebar input ----------
-uploaded_imgs = st.file_uploader("Upload image(s)...", type=["jpg","jpeg","png"], accept_multiple_files=True)
-img_size_sel = st.sidebar.select_slider("Ukuran input", options=[128,160,192,224,256,299], value=224)
-alpha = st.sidebar.slider("Transparansi overlay", 0.1, 0.9, 0.35, 0.05)
-topk = st.sidebar.slider("Top-K", 1, 10, 5)
+# ---------- sidebar controls ----------
+with st.sidebar:
+    st.header("⚙️ Pengaturan")
+    alpha = st.slider("Transparansi Overlay Heatmap", 0.1, 0.9, 0.35, 0.05)
+    topk = st.slider("Jumlah Top-K Prediksi", 1, 10, 5)
+    img_size_sel = st.select_slider("Ukuran Input Model", options=[128, 160, 192, 224, 256, 299], value=224)
+    st.markdown("---")
+    st.caption("🤖 **Model:** NasNetMobile Dual-Head  \n🔬 **XAI:** Eigen-CAM (Class-agnostic)")
 
-if not uploaded_imgs:
-    st.info("⬅️ Upload satu atau beberapa gambar untuk mulai.")
+# ---------- pilihan input: Kamera Smartphone vs Galeri ----------
+input_source = st.radio(
+    "Pilih Sumber Foto:",
+    ["📷 Kamera Smartphone Langsung", "📁 Galeri / Upload Berkas"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
+images_to_process = []
+
+if "Kamera" in input_source:
+    st.caption("👉 Arahkan kamera smartphone Anda ke daun tanaman, lalu tekan tombol foto.")
+    cam_file = st.camera_input("Arahkan kamera ke daun tanaman", label_visibility="collapsed")
+    if cam_file is not None:
+        images_to_process.append((cam_file, "Foto Kamera"))
+else:
+    uploaded_files = st.file_uploader(
+        "Pilih foto daun dari galeri:",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True
+    )
+    if uploaded_files:
+        for f in uploaded_files:
+            images_to_process.append((f, f.name))
+
+if not images_to_process:
+    st.info("💡 Silakan ambil foto langsung dengan kamera atau pilih dari galeri untuk memulai diagnosa.")
     st.stop()
 
 # ---------- proses tiap gambar ----------
-# siapkan activation model sekali
-acts_demo, last_name, _ = get_acts_safe(model, np.zeros((1, img_size_sel, img_size_sel, 3), dtype=np.float32))
-# (kalau gagal di sini, nanti tiap gambar akan coba ulang; ini hanya warm-up)
-
-for up in uploaded_imgs:
-    orig = Image.open(up).convert("RGB")
+for up_file, up_name in images_to_process:
+    orig = Image.open(up_file).convert("RGB")
     arr = preprocess_pil(orig, (img_size_sel, img_size_sel))
     batch = np.expand_dims(arr, axis=0).astype("float32")
 
-    # prediksi dua head
+    # Prediksi dua head
     try:
         plant_logits, disease_logits = model(batch, training=False)
     except Exception:
@@ -204,44 +317,59 @@ for up in uploaded_imgs:
 
     p_probs = ensure_softmax(np.array(plant_logits))
     d_probs = ensure_softmax(np.array(disease_logits))
-    p_idx = int(np.argmax(p_probs[0])); d_idx = int(np.argmax(d_probs[0]))
+    p_idx = int(np.argmax(p_probs[0]))
+    d_idx = int(np.argmax(d_probs[0]))
     p_lbl = plant_labels[p_idx] if p_idx < len(plant_labels) else f"class_{p_idx}"
     d_lbl = disease_labels[d_idx] if d_idx < len(disease_labels) else f"class_{d_idx}"
+    p_conf = p_probs[0][p_idx] * 100
+    d_conf = d_probs[0][d_idx] * 100
 
-    st.markdown(f"### 📷 {up.name}")
-    st.caption(f"Prediksi → **Plant:** {p_lbl} (p={p_probs[0][p_idx]:.3f}) | **Disease:** {d_lbl} (p={d_probs[0][d_idx]:.3f})")
+    # Kartu Hasil Diagnosa Utama (Elegan & Mobile-friendly)
+    st.markdown(f"""
+    <div class="diagnosis-card">
+        <div style="font-weight: 700; color: #166534; margin-bottom: 6px;">📋 Hasil Diagnosa ({up_name})</div>
+        <div class="diagnosis-item">
+            <span class="diag-label">🌿 Jenis Tanaman</span>
+            <div><span class="diag-val">{p_lbl}</span><span class="diag-badge">{p_conf:.1f}%</span></div>
+        </div>
+        <div class="diagnosis-item">
+            <span class="diag-label">🦠 Dugaan Penyakit</span>
+            <div><span class="diag-val" style="color: {'#15803d' if 'healthy' in d_lbl.lower() else '#b91c1c'};">{d_lbl}</span><span class="diag-badge">{d_conf:.1f}%</span></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # tampilkan top-k
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Top-K Plant**")
-        for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
-            st.progress(p, text=f"{lbl}: {p:.3f}")
-    with c2:
-        st.markdown("**Top-K Disease**")
-        for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
-            st.progress(p, text=f"{lbl}: {p:.3f}")
-
-    # 3 kolom: Ori → Eigen overlay → Heat-only
-    col1, col2, col3 = st.columns(3, gap="small")
-    with col1:
-        st.image(orig, caption="Original", use_container_width=True)
-
+    # Visualisasi XAI & Foto (Menggunakan Tab Responsif untuk Smartphone)
     acts, last_name, err = get_acts_safe(model, batch)
-    if acts is None:
-        with col2: st.warning(f"EigenCAM belum bisa dibuat: {err}")
-        with col3: st.info("Heatmap tidak tersedia.")
-        continue
 
-    heat = eigen_cam_from_acts(acts)
-    overlay_img = overlay_heatmap_on_img(orig, heat, alpha=alpha)
-    heat_only   = colorize_only(heat, orig.size)
+    if acts is not None:
+        heat = eigen_cam_from_acts(acts)
+        overlay_img = overlay_heatmap_on_img(orig, heat, alpha=alpha)
+        heat_only   = colorize_only(heat, orig.size)
 
-    with col2:
-        st.image(overlay_img, caption=f"Eigen Overlay (last: {last_name})", use_container_width=True)
-    with col3:
-        st.image(heat_only, caption="Eigen Heatmap", use_container_width=True)
+        tab_overlay, tab_heat, tab_orig = st.tabs(["✨ Visualisasi Overlay XAI", "🔥 Heatmap Saja", "📷 Foto Asli"])
+        with tab_overlay:
+            st.image(overlay_img, caption="Area merah/kuning adalah fokus model dalam mendeteksi gejala.", use_container_width=True)
+        with tab_heat:
+            st.image(heat_only, caption=f"Peta Aktivasi Konvolusi ({last_name})", use_container_width=True)
+        with tab_orig:
+            st.image(orig, caption="Foto Daun Asli", use_container_width=True)
+    else:
+        st.warning(f"EigenCAM belum dapat dirender: {err}")
+        st.image(orig, caption="Foto Daun Asli", use_container_width=True)
 
-st.markdown("---")
-st.caption("EigenCAM bersifat class-agnostic (tidak memilih head). "
-           "Jika overlay terlalu kuat/terang, turunkan slider transparansi.")
+    # Detail Probabilitas Top-K
+    with st.expander("📊 Lihat Detail Probabilitas Lainnya (Top-K)", expanded=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Top-K Tanaman**")
+            for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
+                st.progress(p, text=f"{lbl}: {p*100:.1f}%")
+        with c2:
+            st.markdown("**Top-K Penyakit**")
+            for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
+                st.progress(p, text=f"{lbl}: {p*100:.1f}%")
+
+    st.markdown("---")
+
+st.caption("ℹ️ Tips: Buka menu samping (ikon panah kiri atas) untuk mengatur transparansi overlay atau Top-K.")
