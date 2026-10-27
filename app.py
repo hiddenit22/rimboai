@@ -411,6 +411,59 @@ st.markdown("""
         border: 1px solid #f87171;
     }
 
+    /* Unrecognized / Low Confidence Alert Card */
+    .unrec-card {
+        background: #ffffff;
+        border: 1.5px solid #cbd5e1;
+        border-top: 4px solid #f59e0b;
+        margin: 16px 0;
+        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.04);
+    }
+    .unrec-top {
+        background: #fffbeb;
+        border-bottom: 1px solid #fde68a;
+        color: #92400e;
+        padding: 10px 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .unrec-title {
+        font-size: 0.88rem;
+        font-weight: 900;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: #92400e;
+    }
+    .unrec-body {
+        padding: 14px;
+    }
+    .unrec-notice {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 10px 12px;
+        font-size: 0.82rem;
+        color: #78350f;
+        line-height: 1.5;
+        margin-bottom: 12px;
+    }
+    .unrec-guide-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 10px 12px;
+        margin-top: 12px;
+    }
+    .unrec-guide-head {
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        color: #475569;
+        margin-bottom: 6px;
+        letter-spacing: 0.04em;
+    }
+
     /* Treatment Prescription Card */
     .rx-card {
         background: #ffffff;
@@ -808,6 +861,7 @@ if len(model.outputs) != 2:
 # ---------- Sidebar Controls ----------
 with st.sidebar:
     st.markdown("### ⚙️ Pengaturan Studio")
+    conf_thresh = st.slider("Batas Akurasi Valid (%)", 30, 80, 50, 5, help="Jika akurasi deteksi di bawah batas ini, sistem akan menampilkan status Tidak Terdeteksi / Tidak Dikenali.")
     alpha = st.slider("Transparansi Overlay Heatmap", 0.1, 0.9, 0.35, 0.05)
     topk = st.slider("Jumlah Top-K Prediksi", 1, 10, 5)
     img_size_sel = st.select_slider("Ukuran Input Model (px)", options=[128, 160, 192, 224, 256, 299], value=224)
@@ -943,53 +997,131 @@ for up_file, up_name in images_to_process:
     d_conf = d_probs[0][d_idx] * 100
     is_healthy = "healthy" in d_lbl.lower()
 
-    # Kartu Hasil Diagnosa (Mobile Layout)
-    st.markdown(f"""
-    <div class="result-card">
-        <div class="result-top">
-            <div class="result-title">HASIL DIAGNOSA ({up_name})</div>
-            <div class="result-id">ID: {report_id}</div>
-        </div>
-        <div class="result-body">
-            <div class="result-metrics">
-                <div class="metric-cell">
-                    <div class="cell-label">Varietas Tanaman</div>
-                    <div class="cell-val">{p_lbl}</div>
-                    <span class="cell-pill pill-green">Akurasi: {p_conf:.1f}%</span>
+    # Evaluasi Ambang Batas Keyakinan Model (Confidence Threshold)
+    is_plant_valid = p_conf >= conf_thresh
+    is_disease_valid = d_conf >= max(35.0, conf_thresh - 10.0)
+
+    if not is_plant_valid:
+        # KASUS 1: Objek tidak dikenali sebagai daun dari 10 komoditas target
+        st.markdown(f"""
+        <div class="unrec-card">
+            <div class="unrec-top">
+                <div class="unrec-title">⚠️ GAMBAR TIDAK DIKENALI ({up_name})</div>
+                <div class="result-id">ID: {report_id}</div>
+            </div>
+            <div class="unrec-body">
+                <div class="unrec-notice">
+                    <b>Akurasi Model Rendah ({p_conf:.1f}%):</b> Objek tidak dapat diidentifikasi secara meyakinkan sebagai salah satu dari 10 komoditas tanaman yang didukung. Sistem mendeteksi kemungkinan foto bukan helai daun tanaman, foto terlalu buram, atau objek di luar cakupan data latih.
                 </div>
-                <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
-                    <div class="cell-label">Diagnosa Patogen</div>
-                    <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'};">{d_lbl}</div>
-                    <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
-                        {'Kondisi Sehat' if is_healthy else 'Terindikasi Sakit'} • {d_conf:.1f}%
-                    </span>
+                <div class="result-metrics">
+                    <div class="metric-cell" style="border-top: 3px solid #f59e0b;">
+                        <div class="cell-label">Dugaan Terdekat Tanaman</div>
+                        <div class="cell-val" style="color: #b45309;">{p_lbl}</div>
+                        <span class="cell-pill" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">
+                            Akurasi: {p_conf:.1f}% (Batas Minimum: {conf_thresh:.0f}%)
+                        </span>
+                    </div>
+                    <div class="metric-cell" style="border-top: 3px solid #f59e0b;">
+                        <div class="cell-label">Status Diagnosa Patogen</div>
+                        <div class="cell-val" style="color: #64748b;">Tidak Terdeteksi</div>
+                        <span class="cell-pill" style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1;">
+                            Objek Tidak Valid
+                        </span>
+                    </div>
+                </div>
+                <div class="unrec-guide-box">
+                    <div class="unrec-guide-head">💡 Petunjuk Pemotretan Ulang:</div>
+                    <div class="rx-item"><span class="rx-marker">■</span><span>Pastikan objek foto adalah <b>helai daun</b> dari 10 komoditas resmi (Tomat, Terong, Mentimun, Pare, Kacang Panjang, Buncis, Kembang Kol, Lobak, Sirih, Labu Air).</span></div>
+                    <div class="rx-item"><span class="rx-marker">■</span><span>Ambil foto dari jarak ideal <b>15–30 cm</b> di bawah pencahayaan alami yang terang merata.</span></div>
+                    <div class="rx-item"><span class="rx-marker">■</span><span>Hindari foto buram, gelap, atau memuat banyak objek/tanaman lain sekaligus.</span></div>
                 </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # Protokol Resep Pengendalian Fitopatologi
-    d_info = get_disease_details(d_lbl)
-    rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
+    elif not is_disease_valid:
+        # KASUS 2: Tanaman teridentifikasi, namun gejala patogen tidak terdeteksi pasti
+        st.markdown(f"""
+        <div class="unrec-card">
+            <div class="unrec-top">
+                <div class="unrec-title">⚠️ GEJALA PENYAKIT TIDAK TERDETEKSI PASTI ({up_name})</div>
+                <div class="result-id">ID: {report_id}</div>
+            </div>
+            <div class="unrec-body">
+                <div class="unrec-notice">
+                    <b>Komoditas Terdeteksi:</b> Tanaman teridentifikasi sebagai <b>{p_lbl}</b> (Akurasi: {p_conf:.1f}%), namun pola bercak pada daun tidak memiliki kepastian tinggi yang cocok dengan 24 kelas patogen model (Kepastian: {d_conf:.1f}%).
+                </div>
+                <div class="result-metrics">
+                    <div class="metric-cell">
+                        <div class="cell-label">Varietas Tanaman</div>
+                        <div class="cell-val">{p_lbl}</div>
+                        <span class="cell-pill pill-green">Akurasi: {p_conf:.1f}%</span>
+                    </div>
+                    <div class="metric-cell" style="border-top: 3px solid #f59e0b;">
+                        <div class="cell-label">Diagnosa Patogen</div>
+                        <div class="cell-val" style="color: #b45309;">Meragukan</div>
+                        <span class="cell-pill" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">
+                            Dugaan: {d_lbl} ({d_conf:.1f}%)
+                        </span>
+                    </div>
+                </div>
+                <div class="unrec-guide-box">
+                    <div class="unrec-guide-head">💡 Rekomendasi Agronom:</div>
+                    <div class="rx-item"><span class="rx-marker">■</span><span>Ambil foto ulang lebih dekat tepat pada area bercak daun yang dicurigai sakit.</span></div>
+                    <div class="rx-item"><span class="rx-marker">■</span><span>Jika daun tampak hijau segar tanpa noda bercak yang jelas, kemungkinan besar tanaman dalam kondisi sehat normal.</span></div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="rx-card">
-        <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
-        <div class="rx-section">
-            <div class="rx-caption">Nama Penyakit & Penyebab</div>
-            <div class="rx-val"><b>{d_info['nama_id']}</b> ({d_info['penyebab']})</div>
+    else:
+        # KASUS 3: Deteksi Valid dan Yakin
+        st.markdown(f"""
+        <div class="result-card">
+            <div class="result-top">
+                <div class="result-title">HASIL DIAGNOSA ({up_name})</div>
+                <div class="result-id">ID: {report_id}</div>
+            </div>
+            <div class="result-body">
+                <div class="result-metrics">
+                    <div class="metric-cell">
+                        <div class="cell-label">Varietas Tanaman</div>
+                        <div class="cell-val">{p_lbl}</div>
+                        <span class="cell-pill pill-green">Akurasi: {p_conf:.1f}%</span>
+                    </div>
+                    <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
+                        <div class="cell-label">Diagnosa Patogen</div>
+                        <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'};">{d_lbl}</div>
+                        <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
+                            {'Kondisi Sehat' if is_healthy else 'Terindikasi Sakit'} • {d_conf:.1f}%
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="rx-section">
-            <div class="rx-caption">Karakteristik Gejala Lapangan</div>
-            <div class="rx-val">{d_info['gejala']}</div>
+        """, unsafe_allow_html=True)
+
+        # Protokol Resep Pengendalian Fitopatologi
+        d_info = get_disease_details(d_lbl)
+        rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
+
+        st.markdown(f"""
+        <div class="rx-card">
+            <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
+            <div class="rx-section">
+                <div class="rx-caption">Nama Penyakit & Penyebab</div>
+                <div class="rx-val"><b>{d_info['nama_id']}</b> ({d_info['penyebab']})</div>
+            </div>
+            <div class="rx-section">
+                <div class="rx-caption">Karakteristik Gejala Lapangan</div>
+                <div class="rx-val">{d_info['gejala']}</div>
+            </div>
+            <div class="rx-action-box">
+                <div class="rx-caption" style="color: #15803d;">Tindakan Pengendalian Terpadu (PHT):</div>
+                {rx_items_html}
+            </div>
         </div>
-        <div class="rx-action-box">
-            <div class="rx-caption" style="color: #15803d;">Tindakan Pengendalian Terpadu (PHT):</div>
-            {rx_items_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # Studio Visualisasi Explainable AI (Eigen-CAM)
     st.markdown("""
