@@ -1091,7 +1091,7 @@ Format Jawaban (Tuliskan langsung dalam format rapi ini):
             }
         }
         
-        candidate_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
+        candidate_models = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]
         last_err = ""
         
         for model_name in candidate_models:
