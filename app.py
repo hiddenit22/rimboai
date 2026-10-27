@@ -46,9 +46,30 @@ st.markdown("""
         color: #0f172a !important;
     }
 
+    /* HIDE STREAMLIT DEFAULT HEADER, TOOLBAR, FORK, GITHUB, AND DOUBLE ARROW */
+    header, [data-testid="stHeader"], .stAppHeader {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+        padding: 0px !important;
+    }
+    #MainMenu, [data-testid="stToolbar"], [data-testid="stDecoration"], [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+        width: 0px !important;
+    }
+
+    /* HIDE STREAMLIT FOOTER, MANAGE BADGE, AND GITHUB/VIEWER BADGES */
+    footer, [data-testid="manage-app-button"], div[class*="viewerBadge"], [data-testid="stStatusWidget"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+    }
+
     /* Responsive Mobile Screen Shell */
     .block-container {
-        padding-top: 0.6rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 2.5rem !important;
         padding-left: 0.75rem !important;
         padding-right: 0.75rem !important;
@@ -767,7 +788,7 @@ if not images_to_process:
     st.markdown("""
     <div class="app-footer">
         <b>RimboAI</b> • Platform Diagnosa Kesehatan Tanaman & Explainable AI<br>
-        <i>Sistem Informasi & Agritechnology Digital © 2026</i>
+        <i>Copyright © 2026 Dede Fauzi, M.Kom. All rights reserved.</i>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
@@ -898,6 +919,6 @@ for up_file, up_name in images_to_process:
 st.markdown("""
 <div class="app-footer">
     <b>RimboAI</b> • Platform Diagnosa Kesehatan Tanaman & Explainable AI<br>
-    <i>Sistem Informasi & Agritechnology Digital © 2026</i>
+    <i>Copyright © 2026 Dede Fauzi, M.Kom. All rights reserved.</i>
 </div>
 """, unsafe_allow_html=True)

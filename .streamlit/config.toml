@@ -10,3 +10,8 @@ base = "light"
 headless = true
 enableCORS = false
 enableXsrfProtection = false
+
+[client]
+showErrorDetails = false
+toolbarMode = "minimal"
+
