@@ -1041,6 +1041,7 @@ else:
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True
     )
+    st.caption("💡 **Mendukung Multi-Upload:** Anda dapat memilih dan mengunggah banyak foto sekaligus (tahan tombol `Ctrl`/`Shift` di komputer atau tandai beberapa foto di galeri smartphone).")
     if uploaded_files:
         for f in uploaded_files:
             images_to_process.append((f, f.name))
@@ -1116,6 +1117,13 @@ if not images_to_process:
     st.stop()
 
 # ---------- Proses Inferensi Gambar Terpilih ----------
+if len(images_to_process) > 1:
+    st.markdown(f"""
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #16a34a; padding:10px 14px; margin: 12px 0 16px 0; font-size:0.85rem; color:#166534; font-weight:700;">
+        📑 Memproses batch <b>{len(images_to_process)} foto daun</b> sekaligus. Setiap foto dianalisis dan memiliki kartu diagnosa serta visualisasi XAI mandiri di bawah ini.
+    </div>
+    """, unsafe_allow_html=True)
+
 for up_file, up_name in images_to_process:
     report_id = f"RBO-{str(uuid.uuid4())[:6].upper()}"
     timestamp = datetime.datetime.now().strftime("%d %b %Y, %H:%M WIB")
