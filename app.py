@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import cv2
+from disease_info import get_disease_details
 
 # ========= Lokasi file model & label encoders (Relative Path) =========
 BASE_DIR         = os.path.dirname(os.path.abspath(__file__))
@@ -101,6 +102,31 @@ st.markdown("""
     }
     button {
         border-radius: 10px !important;
+    }
+    .treatment-card {
+        background: #ffffff;
+        border: 1.5px solid #e2e8f0;
+        border-left: 5px solid #16a34a;
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin: 14px 0 16px 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    .treatment-header {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #15803d;
+        margin-bottom: 6px;
+    }
+    .treatment-section {
+        margin-top: 6px;
+        font-size: 0.92rem;
+        color: #374151;
+        line-height: 1.45;
+    }
+    .treatment-label {
+        font-weight: 700;
+        color: #111827;
     }
 </style>
 <div class="main-header">
@@ -335,6 +361,26 @@ for up_file, up_name in images_to_process:
         <div class="diagnosis-item">
             <span class="diag-label">🦠 Dugaan Penyakit</span>
             <div><span class="diag-val" style="color: {'#15803d' if 'healthy' in d_lbl.lower() else '#b91c1c'};">{d_lbl}</span><span class="diag-badge">{d_conf:.1f}%</span></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Narasi Gejala & Rekomendasi Penanganan Agronomi
+    d_info = get_disease_details(d_lbl)
+    st.markdown(f"""
+    <div class="treatment-card">
+        <div class="treatment-header">🩺 Informasi & Rekomendasi: {d_info['nama_id']}</div>
+        <div class="treatment-section">
+            <span class="treatment-label">🔬 Patogen Penyebab:</span> {d_info['penyebab']}
+        </div>
+        <div class="treatment-section">
+            <span class="treatment-label">🔍 Gejala Khas:</span> {d_info['gejala']}
+        </div>
+        <div class="treatment-section" style="border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 8px;">
+            <span class="treatment-label" style="color: #15803d;">💊 Langkah Pengendalian & Penanganan:</span>
+            <ul style="margin: 6px 0 0 18px; padding: 0;">
+                {''.join([f'<li style="margin-bottom: 4px;">{step}</li>' for step in d_info['penanganan']])}
+            </ul>
         </div>
     </div>
     """, unsafe_allow_html=True)
