@@ -761,20 +761,36 @@ def eigen_cam_from_acts(acts: np.ndarray) -> np.ndarray:
     if m > 0: heat = heat / m
     return heat
 
-def overlay_heatmap_on_img(orig_img: Image.Image, heat01: np.ndarray, alpha: float = 0.35) -> Image.Image:
-    orig = np.asarray(orig_img.convert("RGB"))
+def overlay_heatmap_on_img(orig_img: Image.Image, heat01: np.ndarray, alpha: float = 0.45, cutoff: float = 0.25) -> Image.Image:
+    orig = np.asarray(orig_img.convert("RGB")).astype(np.float32)
     h, w = orig.shape[:2]
-    hm = (heat01 * 255).astype("uint8")
-    hm = cv2.resize(hm, (w, h), interpolation=cv2.INTER_LINEAR)
-    hm_color = cv2.applyColorMap(hm, cv2.COLORMAP_JET)[:, :, ::-1]  # BGR->RGB
-    blend = (alpha * hm_color + (1 - alpha) * orig).astype("uint8")
+
+    # 1. Resize heatmap ke ukuran dimensi gambar asli
+    hm = cv2.resize(heat01, (w, h), interpolation=cv2.INTER_LINEAR)
+
+    # 2. Cutoff Thresholding: Potong aktivasi rendah yang meluber ke background
+    hm_thresh = np.maximum(hm - cutoff, 0.0)
+    if hm_thresh.max() > 0:
+        hm_thresh = hm_thresh / hm_thresh.max()
+
+    # 3. Pewarnaan Colormap JET
+    hm_uint8 = (hm_thresh * 255).astype(np.uint8)
+    hm_color = cv2.applyColorMap(hm_uint8, cv2.COLORMAP_JET)[:, :, ::-1].astype(np.float32)
+
+    # 4. Dynamic Alpha Blending:
+    # Hanya area dengan aktivasi kuat yang diberi warna; area latar belakang & daun sehat tetap 100% natural tanpa pewarnaan kabur
+    alpha_mask = np.expand_dims(hm_thresh, axis=-1) * alpha
+    blend = (alpha_mask * hm_color + (1.0 - alpha_mask) * orig).clip(0, 255).astype(np.uint8)
     return Image.fromarray(blend)
 
-def colorize_only(heat01: np.ndarray, size_hw: Tuple[int, int]) -> Image.Image:
+def colorize_only(heat01: np.ndarray, size_hw: Tuple[int, int], cutoff: float = 0.25) -> Image.Image:
     w, h = size_hw
-    hm = (heat01 * 255).astype("uint8")
-    hm = cv2.resize(hm, (w, h), interpolation=cv2.INTER_LINEAR)
-    hm_color = cv2.applyColorMap(hm, cv2.COLORMAP_JET)[:, :, ::-1]
+    hm = cv2.resize(heat01, (w, h), interpolation=cv2.INTER_LINEAR)
+    hm_thresh = np.maximum(hm - cutoff, 0.0)
+    if hm_thresh.max() > 0:
+        hm_thresh = hm_thresh / hm_thresh.max()
+    hm_uint8 = (hm_thresh * 255).astype(np.uint8)
+    hm_color = cv2.applyColorMap(hm_uint8, cv2.COLORMAP_JET)[:, :, ::-1]
     return Image.fromarray(hm_color)
 
 def get_acts_safe(model: tf.keras.Model, batch: np.ndarray):
@@ -862,7 +878,8 @@ if len(model.outputs) != 2:
 with st.sidebar:
     st.markdown("### ⚙️ Pengaturan Studio")
     conf_thresh = st.slider("Batas Akurasi Valid (%)", 30, 80, 50, 5, help="Jika akurasi deteksi di bawah batas ini, sistem akan menampilkan status Tidak Terdeteksi / Tidak Dikenali.")
-    alpha = st.slider("Transparansi Overlay Heatmap", 0.1, 0.9, 0.35, 0.05)
+    cam_cutoff = st.slider("Fokus Lesi Heatmap (Cutoff)", 0.0, 0.6, 0.25, 0.05, help="Memotong rembesan aktivasi ke latar belakang/tepi daun agar heatmap terkunci hanya pada fokus infeksi.")
+    alpha = st.slider("Intensitas Warna Heatmap", 0.1, 0.9, 0.45, 0.05)
     topk = st.slider("Jumlah Top-K Prediksi", 1, 10, 5)
     img_size_sel = st.select_slider("Ukuran Input Model (px)", options=[128, 160, 192, 224, 256, 299], value=224)
     st.markdown("---")
@@ -1130,26 +1147,27 @@ for up_file, up_name in images_to_process:
         <div class="sec-title">Studio Transparansi XAI (Eigen-CAM)</div>
     </div>
     <div class="xai-scale">
-        <span>🟦 Area Sehat</span>
+        <span>🌿 Jaringan Alami (Transparan)</span>
         <div class="scale-bar"></div>
-        <span>🟥 Fokus Infeksi</span>
+        <span>🔥 Titik Fokus Infeksi</span>
     </div>
     """, unsafe_allow_html=True)
+    st.caption("Visualisasi dilengkapi Dynamic Thresholding: aktivasi di bawah batas ambang dibuat transparan agar tidak meluber ke latar belakang, mengunci fokus langsung pada bercak penyakit.")
 
     acts, last_name, err = get_acts_safe(model, batch)
 
     if acts is not None:
         heat = eigen_cam_from_acts(acts)
-        overlay_img = overlay_heatmap_on_img(orig, heat, alpha=alpha)
-        heat_only   = colorize_only(heat, orig.size)
+        overlay_img = overlay_heatmap_on_img(orig, heat, alpha=alpha, cutoff=cam_cutoff)
+        heat_only   = colorize_only(heat, orig.size, cutoff=cam_cutoff)
 
         tab_overlay, tab_heat, tab_orig = st.tabs([
-            "✨ Overlay XAI", 
+            "✨ Overlay Terfokus", 
             "🔥 Heatmap Murni", 
             "📷 Foto Asli"
         ])
         with tab_overlay:
-            st.image(overlay_img, caption=f"Visualisasi Overlay Eigen-CAM (Layer: {last_name})", use_container_width=True)
+            st.image(overlay_img, caption=f"Visualisasi Overlay Eigen-CAM Terfokus (Layer: {last_name})", use_container_width=True)
         with tab_heat:
             st.image(heat_only, caption="Aktivasi Fitur Konvolusi 4D Terakhir", use_container_width=True)
         with tab_orig:
