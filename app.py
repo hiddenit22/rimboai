@@ -861,7 +861,37 @@ def colorize_only(heat01: np.ndarray, size_hw: Tuple[int, int], cutoff: float = 
             hm = hm / hm.max()
     hm_uint8 = (hm * 255).astype(np.uint8)
     hm_color = cv2.applyColorMap(hm_uint8, cv2.COLORMAP_JET)[:, :, ::-1]
-    return Image.fromarray(hm_color)
+def compute_dual_cam(orig_rgb: np.ndarray, heat_base: np.ndarray):
+    """
+    Memisahkan visualisasi atensi XAI menjadi dua perspektif fitopatologi:
+    1. Plant CAM: Atensi morfologi makro (menyelimuti seluruh siluet helai daun untuk varietas tanaman).
+    2. Disease CAM: Atensi lesi mikro (mengunci titik-titik bercak nekrosis, klorosis, dan gejala patogen).
+    """
+    h, w = orig_rgb.shape[:2]
+    hm = cv2.resize(heat_base, (w, h), interpolation=cv2.INTER_LINEAR)
+    leaf_mask = get_leaf_mask(orig_rgb)
+    
+    # 1. Plant CAM: Fokus morfologi & siluet daun secara makro
+    plant_cam = hm * leaf_mask
+    if plant_cam.max() > 0:
+        plant_cam = plant_cam / plant_cam.max()
+        
+    # 2. Disease CAM: Fokus pada kontras lesi patogen (bercak nekrosis/klorosis)
+    lab = cv2.cvtColor(orig_rgb.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
+    a_chan = lab[:, :, 1]
+    b_chan = lab[:, :, 2]
+    
+    # Indeks nekrosis / klorosis fitopatologi
+    lesion_idx = (a_chan - 120.0) * 1.5 + (b_chan - 130.0) * 1.0
+    lesion_idx = np.clip(lesion_idx, 0, None)
+    if lesion_idx.max() > 0:
+        lesion_idx = lesion_idx / lesion_idx.max()
+        
+    disease_cam = hm * leaf_mask * (0.25 + 0.75 * lesion_idx)
+    if disease_cam.max() > 0:
+        disease_cam = disease_cam / disease_cam.max()
+        
+    return plant_cam, disease_cam
 
 def get_acts_safe(model: tf.keras.Model, batch: np.ndarray):
     last_conv = _find_last_conv(model)
@@ -1141,41 +1171,54 @@ for up_file, up_name in images_to_process:
     </div>
     """, unsafe_allow_html=True)
 
-    # Studio Visualisasi Explainable AI (Eigen-CAM)
+    # Studio Visualisasi Explainable AI (Dual-Perspective CAM)
     st.markdown("""
     <div class="sec-header">
         <div class="sec-bar"></div>
-        <div class="sec-title">Studio Transparansi XAI (Eigen-CAM)</div>
+        <div class="sec-title">Studio Transparansi XAI (Dual-Perspective CAM)</div>
     </div>
     <div class="xai-scale">
-        <span>🌿 Jaringan Alami (Transparan)</span>
+        <span>🌿 Jaringan Sehat (Transparan)</span>
         <div class="scale-bar"></div>
-        <span>🔥 Titik Fokus Infeksi</span>
+        <span>🔥 Titik Fokus Infeksi / Morfologi</span>
     </div>
     """, unsafe_allow_html=True)
-    st.caption("Visualisasi dilengkapi Dynamic Thresholding: aktivasi di bawah batas ambang dibuat transparan agar tidak meluber ke latar belakang, mengunci fokus langsung pada bercak penyakit.")
 
     acts, last_name, err = get_acts_safe(model, batch)
 
     if acts is not None:
-        heat = eigen_cam_from_acts(acts)
-        heat_gray = make_grayscale_heatmap(heat, orig)
-        overlay_img = overlay_heatmap_on_img(orig, heat, alpha=alpha, cutoff=cam_cutoff)
+        heat_base = eigen_cam_from_acts(acts)
+        orig_np = np.asarray(orig.convert("RGB"))
+        plant_heat, disease_heat = compute_dual_cam(orig_np, heat_base)
 
-        st.markdown("""
-        <div class="sec-header">
-            <div class="sec-bar"></div>
-            <div class="sec-title">EIGEN-CAM (Ori • Heat • Overlay)</div>
-        </div>
-        """, unsafe_allow_html=True)
+        tab_disease, tab_plant = st.tabs([
+            "🔬 XAI DIAGNOSA PENYAKIT (FOKUS SPOT LESI)",
+            "🌿 XAI VARIETAS TANAMAN (FOKUS MORFOLOGI DAUN)"
+        ])
 
-        c_ori, c_heat, c_over = st.columns(3)
-        with c_ori:
-            st.image(orig, caption="Ori (Foto Asli)", use_container_width=True)
-        with c_heat:
-            st.image(heat_gray, caption="Heat (Aktivasi)", use_container_width=True)
-        with c_over:
-            st.image(overlay_img, caption="Overlay (Visual XAI)", use_container_width=True)
+        with tab_disease:
+            st.caption("🔥 **Fokus Patogen Penyakit:** Mengisolasi bercak nekrotik, klorosis, dan spot infeksi aktif pada permukaan helai daun.")
+            d_heat_gray = make_grayscale_heatmap(disease_heat, orig)
+            d_overlay = overlay_heatmap_on_img(orig, disease_heat, alpha=alpha, cutoff=cam_cutoff)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.image(orig, caption="Ori (Foto Asli)", use_container_width=True)
+            with c2:
+                st.image(d_heat_gray, caption="Heat (Peta Lesi)", use_container_width=True)
+            with c3:
+                st.image(d_overlay, caption="Overlay (Visual Bercak)", use_container_width=True)
+
+        with tab_plant:
+            st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti keseluruhan siluet helai daun, tulang daun, dan kontur bentuk komoditas.")
+            p_heat_gray = make_grayscale_heatmap(plant_heat, orig)
+            p_overlay = overlay_heatmap_on_img(orig, plant_heat, alpha=alpha, cutoff=0.0)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.image(orig, caption="Ori (Foto Asli)", use_container_width=True)
+            with c2:
+                st.image(p_heat_gray, caption="Heat (Siluet Daun)", use_container_width=True)
+            with c3:
+                st.image(p_overlay, caption="Overlay (Visual Bentuk)", use_container_width=True)
     else:
         st.warning(f"EigenCAM belum dapat dirender: {err}")
         st.image(orig, caption="Foto Daun Asli", use_container_width=True)
