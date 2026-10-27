@@ -1,6 +1,6 @@
 # app.py — RimboAI: Mobile Field Utility for Plant Pathology Diagnostics
 # ------------------------------------------------------------------------
-import os, io, pickle, uuid, datetime, base64, requests
+import os, io, pickle, uuid, datetime, base64, requests, time
 from typing import Optional, Tuple, List
 
 import streamlit as st
@@ -1043,8 +1043,8 @@ def verify_with_gemini(
     try:
         buf = io.BytesIO()
         img_copy = pil_img.copy()
-        img_copy.thumbnail((800, 800))
-        img_copy.convert("RGB").save(buf, format="JPEG", quality=85)
+        img_copy.thumbnail((512, 512))
+        img_copy.convert("RGB").save(buf, format="JPEG", quality=80)
         b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
         
         p_alts = ", ".join([f"{lbl} ({c*100:.1f}%)" for lbl, c in top_plants[1:4]])
@@ -1091,26 +1091,40 @@ Format Jawaban (Tuliskan langsung dalam format rapi ini):
             }
         }
         
-        candidate_models = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"]
+        # Urutan prioritas model: model yang paling stabil dan responsif di tempat teratas
+        candidate_models = [
+            "gemini-3.5-flash",
+            "gemini-3.6-flash",
+            "gemini-3.8-flash",
+            "gemini-flash-latest",
+            "gemini-3.5-flash-lite"
+        ]
         last_err = ""
         
         for model_name in candidate_models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-            try:
-                res = requests.post(url, json=payload, timeout=25)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if text:
-                            return True, text
-                else:
-                    last_err = f"{model_name} (HTTP {res.status_code}): {res.text[:120]}"
-            except Exception as e_sub:
-                last_err = str(e_sub)
+            for attempt in range(2):
+                try:
+                    res = requests.post(url, json=payload, timeout=25)
+                    if res.status_code == 200:
+                        data = res.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                            if text:
+                                return True, text
+                    elif res.status_code == 503:
+                        last_err = f"{model_name} (HTTP 503 Beban Server)"
+                        time.sleep(1.2)
+                        continue
+                    else:
+                        last_err = f"{model_name} (HTTP {res.status_code}): {res.text[:100]}"
+                        break
+                except Exception as e_sub:
+                    last_err = str(e_sub)
+                    break
                 
-        return False, f"Layanan Gemini sedang sibuk atau respons tidak valid ({last_err}). Silakan coba sesaat lagi."
+        return False, f"Server Gemini sedang mengalami lonjakan beban sesaat ({last_err}). Silakan tekan tombol sekali lagi dalam beberapa detik."
     except Exception as ex:
         return False, f"Terjadi kesalahan saat memproses gambar: {str(ex)}"
 
