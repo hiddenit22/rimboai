@@ -788,33 +788,38 @@ def eigen_cam_from_acts(acts: np.ndarray) -> np.ndarray:
     return heat
 
 def get_leaf_mask(orig_rgb: np.ndarray) -> np.ndarray:
-    # Segmentasi siluet daun dari berbagai latar belakang (studio biru, kertas putih, kain hitam)
+    # Segmentasi siluet daun presisi dari berbagai latar belakang (studio biru, kertas putih, kain hitam, kebun)
+    rgb = orig_rgb.astype(np.float32)
+    R, G, B = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
+    
+    # 1. Excess Green Index (ExG): Standar agronomis untuk vegetasi daun
+    exg = 2.0 * G - R - B
+    
+    # 2. Deteksi latar belakang studio terkontrol
     bgr = cv2.cvtColor(orig_rgb.astype(np.uint8), cv2.COLOR_RGB2BGR)
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
     
-    # 1. Deteksi latar belakang biru studio (seperti foto Bugwood / ForestryImages)
-    is_blue_bg = (hsv[:,:,0] >= 90) & (hsv[:,:,0] <= 140) & (hsv[:,:,1] >= 30)
+    is_blue_bg = (hsv[:,:,0] >= 85) & (hsv[:,:,0] <= 145) & (hsv[:,:,1] >= 25)
+    is_white_bg = (lab[:,:,0] >= 220)
+    is_black_bg = (lab[:,:,0] <= 30)
+    is_studio_bg = is_blue_bg | is_white_bg | is_black_bg
     
-    # 2. Deteksi latar belakang putih terang (PlantVillage benchmark)
-    is_white_bg = (lab[:,:,0] >= 225)
-    
-    # 3. Deteksi latar belakang hitam gelap pekat (Kaggle cloth)
-    is_black_bg = (lab[:,:,0] <= 28)
-    
-    bg_mask = is_blue_bg | is_white_bg | is_black_bg
-    
-    # Jika terdeteksi latar belakang buatan (studio/kertas/kain)
-    if bg_mask.mean() > 0.05 and bg_mask.mean() < 0.95:
-        leaf_mask = (~bg_mask).astype(np.float32)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        leaf_mask = cv2.morphologyEx(leaf_mask, cv2.MORPH_CLOSE, kernel)
-        leaf_mask = cv2.morphologyEx(leaf_mask, cv2.MORPH_OPEN, kernel)
-        leaf_mask = cv2.dilate(leaf_mask, kernel, iterations=2)
-        return leaf_mask
-    
-    # Jika foto di alam liar / kebun tanpa latar belakang studio polos, gunakan mask penuh
-    return np.ones((orig_rgb.shape[0], orig_rgb.shape[1]), dtype=np.float32)
+    if is_studio_bg.mean() > 0.05 and is_studio_bg.mean() < 0.95:
+        mask = (~is_studio_bg).astype(np.float32)
+    else:
+        # Lapangan / Kebun Alami: gunakan ExG dan deteksi jaringan daun
+        is_green = (exg > 5.0) | ((G > R) & (G > B))
+        is_leaf_tissue = is_green | (lab[:,:,1] < 125) | ((lab[:,:,2] > 135) & (lab[:,:,0] > 50))
+        mask = is_leaf_tissue.astype(np.float32)
+        if mask.mean() < 0.05:
+            mask = np.ones((orig_rgb.shape[0], orig_rgb.shape[1]), dtype=np.float32)
+            
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.dilate(mask, kernel, iterations=2)
+    return mask
 
 def overlay_heatmap_on_img(orig_img: Image.Image, heat01: np.ndarray, alpha: float = 0.45, cutoff: float = 0.0) -> Image.Image:
     orig = np.asarray(orig_img.convert("RGB")).astype(np.float32)
@@ -861,33 +866,55 @@ def colorize_only(heat01: np.ndarray, size_hw: Tuple[int, int], cutoff: float = 
             hm = hm / hm.max()
     hm_uint8 = (hm * 255).astype(np.uint8)
     hm_color = cv2.applyColorMap(hm_uint8, cv2.COLORMAP_JET)[:, :, ::-1]
+    return Image.fromarray(hm_color)
+
 def compute_dual_cam(orig_rgb: np.ndarray, heat_base: np.ndarray):
     """
     Memisahkan visualisasi atensi XAI menjadi dua perspektif fitopatologi:
-    1. Plant CAM: Atensi morfologi makro (menyelimuti seluruh siluet helai daun untuk varietas tanaman).
-    2. Disease CAM: Atensi lesi mikro (mengunci titik-titik bercak nekrosis, klorosis, dan gejala patogen).
+    1. Plant CAM: Menangkap garis daun (tulang daun & garis tepi daun) serta siluet helai daun utuh.
+    2. Disease CAM: Mengunci titik-titik bercak nekrosis, klorosis, dan spot infeksi patogen.
     """
     h, w = orig_rgb.shape[:2]
-    hm = cv2.resize(heat_base, (w, h), interpolation=cv2.INTER_LINEAR)
     leaf_mask = get_leaf_mask(orig_rgb)
+    gray = cv2.cvtColor(orig_rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY)
     
-    # 1. Plant CAM: Fokus morfologi & siluet daun secara makro
-    plant_cam = hm * leaf_mask
+    # 1. Ekstraksi Garis Daun (Leaf Veins & Contours)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    cl = clahe.apply(gray)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    gradient = cv2.morphologyEx(cl, cv2.MORPH_GRADIENT, kernel)
+    vein_lines = gradient.astype(np.float32) / 255.0
+    if vein_lines.max() > 0:
+        vein_lines = vein_lines / vein_lines.max()
+        
+    # Garis tepi luar daun (boundary / contour)
+    leaf_u8 = (leaf_mask * 255).astype(np.uint8)
+    contours, _ = cv2.findContours(leaf_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    edge_lines = np.zeros_like(leaf_mask)
+    cv2.drawContours(edge_lines, contours, -1, 1.0, thickness=2)
+    
+    # 2. PLANT CAM: Tangkap garis daun (veins + boundary) dan sebar aktivasi ke seluruh helai daun
+    # Menghilangkan efek 'hanya titik tengah bulat'
+    hm_raw = cv2.resize(heat_base, (w, h), interpolation=cv2.INTER_LINEAR)
+    # Peta struktur garis daun: siluet dasar (0.50) + garis pertulangan daun (0.35) + garis batas tepi (0.25)
+    leaf_structure = leaf_mask * (0.50 + 0.35 * vein_lines) + 0.25 * edge_lines
+    leaf_structure = np.clip(leaf_structure, 0.0, 1.0)
+    
+    # Gabungkan dengan bobot aktivasi global tanpa memotong tepi
+    plant_cam = leaf_structure * (0.45 + 0.55 * (hm_raw * leaf_mask))
     if plant_cam.max() > 0:
         plant_cam = plant_cam / plant_cam.max()
         
-    # 2. Disease CAM: Fokus pada kontras lesi patogen (bercak nekrosis/klorosis)
+    # 3. DISEASE CAM: Mengunci bercak penyakit (klorosis kuning + nekrosis cokelat/hitam)
     lab = cv2.cvtColor(orig_rgb.astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
     a_chan = lab[:, :, 1]
     b_chan = lab[:, :, 2]
-    
-    # Indeks nekrosis / klorosis fitopatologi
     lesion_idx = (a_chan - 120.0) * 1.5 + (b_chan - 130.0) * 1.0
     lesion_idx = np.clip(lesion_idx, 0, None)
     if lesion_idx.max() > 0:
         lesion_idx = lesion_idx / lesion_idx.max()
         
-    disease_cam = hm * leaf_mask * (0.25 + 0.75 * lesion_idx)
+    disease_cam = hm_raw * leaf_mask * (0.25 + 0.75 * lesion_idx)
     if disease_cam.max() > 0:
         disease_cam = disease_cam / disease_cam.max()
         
@@ -1209,16 +1236,16 @@ for up_file, up_name in images_to_process:
                 st.image(d_overlay, caption="Overlay (Visual Bercak)", use_container_width=True)
 
         with tab_plant:
-            st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti keseluruhan siluet helai daun, tulang daun, dan kontur bentuk komoditas.")
+            st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti garis pertulangan daun, kontur batas tepi daun, dan siluet morfologi komoditas.")
             p_heat_gray = make_grayscale_heatmap(plant_heat, orig)
             p_overlay = overlay_heatmap_on_img(orig, plant_heat, alpha=alpha, cutoff=0.0)
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.image(orig, caption="Ori (Foto Asli)", use_container_width=True)
             with c2:
-                st.image(p_heat_gray, caption="Heat (Siluet Daun)", use_container_width=True)
+                st.image(p_heat_gray, caption="Heat (Garis & Siluet Daun)", use_container_width=True)
             with c3:
-                st.image(p_overlay, caption="Overlay (Visual Bentuk)", use_container_width=True)
+                st.image(p_overlay, caption="Overlay (Visual Anatomi)", use_container_width=True)
     else:
         st.warning(f"EigenCAM belum dapat dirender: {err}")
         st.image(orig, caption="Foto Daun Asli", use_container_width=True)
