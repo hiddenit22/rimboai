@@ -1,6 +1,6 @@
 # app.py — NasNet (Plant & Disease) + EigenCAM, fixed model path
 # ---------------------------------------------------------------
-import os, io, pickle
+import os, io, pickle, uuid, datetime
 from typing import Optional, Tuple, List
 
 import streamlit as st
@@ -19,119 +19,368 @@ DISEASE_PKL_PATH = os.path.join(BASE_DIR, "Encoder", "disease_encoder.pkl")
 # =====================================================================
 
 st.set_page_config(
-    page_title="Rimbo AI — Plant & Disease Diagnosis",
+    page_title="RimboAI — Smart Plant Health Diagnostics",
     page_icon="🌿",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS agar tampilan smartphone responsif, rapi, dan modern
+# Custom Design System: Google Font, Glassmorphism, Animated Badges & Clean Cards
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+    html, body, [class*="css"], .stMarkdown, .stText, p, span, div {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+
     .block-container {
         padding-top: 1.2rem;
-        padding-bottom: 2rem;
-        padding-left: 0.8rem;
-        padding-right: 0.8rem;
-        max-width: 720px;
+        padding-bottom: 3rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 780px;
     }
-    .main-header {
+
+    /* Hero Banner */
+    .hero-banner {
+        background: linear-gradient(135deg, #064e3b 0%, #065f46 45%, #047857 100%);
+        border-radius: 20px;
+        padding: 26px 20px;
+        color: #ffffff;
         text-align: center;
-        margin-bottom: 1.2rem;
+        margin-bottom: 22px;
+        box-shadow: 0 12px 28px -6px rgba(6, 78, 59, 0.35);
+        position: relative;
+        overflow: hidden;
     }
-    .main-title {
-        font-size: 1.6rem;
+    .hero-banner::after {
+        content: '';
+        position: absolute;
+        top: -40px;
+        right: -40px;
+        width: 120px;
+        height: 120px;
+        background: radial-gradient(circle, rgba(52, 211, 153, 0.25) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(8px);
+        padding: 5px 14px;
+        border-radius: 30px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #a7f3d0;
+        margin-bottom: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+    }
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        background-color: #34d399;
+        border-radius: 50%;
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+        animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+    }
+    .hero-title {
+        font-size: 2.1rem;
         font-weight: 800;
-        color: #166534;
-        margin-bottom: 4px;
+        letter-spacing: -0.02em;
+        margin-bottom: 6px;
+        line-height: 1.15;
     }
-    .main-subtitle {
-        font-size: 0.9rem;
-        color: #4b5563;
+    .hero-title span {
+        color: #34d399;
+    }
+    .hero-desc {
+        font-size: 0.92rem;
+        color: #e6fcf5;
+        max-width: 580px;
+        margin: 0 auto 16px auto;
+        line-height: 1.5;
+        font-weight: 400;
+    }
+    .stats-row {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .stat-pill {
+        background: rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        color: #ffffff;
+    }
+    .stat-pill b {
+        color: #6ee7b7;
+    }
+
+    /* Section & Cards */
+    .section-head {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 22px 0 12px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .step-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 16px;
+        height: 100%;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        transition: all 0.2s ease;
+        margin-bottom: 10px;
+    }
+    .step-card:hover {
+        border-color: #10b981;
+        box-shadow: 0 6px 16px rgba(16, 185, 129, 0.1);
+        transform: translateY(-2px);
+    }
+    .step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        background: #ecfdf5;
+        color: #059669;
+        font-weight: 800;
+        font-size: 0.8rem;
+        border-radius: 50%;
         margin-bottom: 8px;
     }
-    .diagnosis-card {
-        background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-        border: 1.5px solid #86efac;
+    .step-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 4px;
+    }
+    .step-desc {
+        font-size: 0.82rem;
+        color: #64748b;
+        line-height: 1.45;
+    }
+
+    /* Crop Tags */
+    .crop-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 10px 0 16px 0;
+    }
+    .crop-pill {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        padding: 5px 12px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #334155;
+        transition: all 0.15s ease;
+    }
+    .crop-pill:hover {
+        background: #ecfdf5;
+        border-color: #6ee7b7;
+        color: #047857;
+    }
+
+    /* Clinical Diagnosis Card */
+    .clinic-card {
+        background: #ffffff;
+        border-radius: 18px;
+        border: 1px solid #cbd5e1;
+        overflow: hidden;
+        margin: 16px 0;
+        box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.08);
+    }
+    .clinic-header {
+        background: linear-gradient(135deg, #047857 0%, #059669 100%);
+        color: #ffffff;
+        padding: 14px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .clinic-title {
+        font-weight: 700;
+        font-size: 1.05rem;
+    }
+    .clinic-id {
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-family: monospace;
+    }
+    .clinic-body {
+        padding: 16px 18px;
+    }
+    .clinic-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    @media (max-width: 600px) {
+        .clinic-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    .metric-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px 14px;
+    }
+    .metric-box-disease {
+        background: #fff5f5;
+        border: 1px solid #fecaca;
+    }
+    .metric-box-healthy {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+    }
+    .metric-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #64748b;
+        margin-bottom: 2px;
+    }
+    .metric-val {
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+    .metric-badge {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 12px;
+        margin-top: 4px;
+    }
+
+    /* Treatment Box */
+    .rx-box {
+        background: #ffffff;
+        border: 1.5px solid #e2e8f0;
+        border-left: 5px solid #059669;
         border-radius: 14px;
         padding: 16px;
         margin: 14px 0;
-        box-shadow: 0 4px 12px rgba(22, 101, 52, 0.08);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
     }
-    .diagnosis-item {
+    .rx-header {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #065f46;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .rx-row {
+        margin-bottom: 8px;
+        font-size: 0.92rem;
+        line-height: 1.5;
+        color: #334155;
+    }
+    .rx-tag {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    /* XAI Studio */
+    .xai-legend {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 6px 0;
-        border-bottom: 1px dashed #bbf7d0;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-size: 0.78rem;
+        color: #475569;
+        margin-top: 8px;
+        margin-bottom: 12px;
     }
-    .diagnosis-item:last-child {
-        border-bottom: none;
+    .gradient-bar {
+        height: 8px;
+        flex-grow: 1;
+        margin: 0 10px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #1e3a8a 0%, #06b6d4 25%, #eab308 60%, #ef4444 100%);
     }
-    .diag-label {
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: #1f2937;
-    }
-    .diag-val {
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: #15803d;
-    }
-    .diag-badge {
-        font-size: 0.8rem;
-        font-weight: 600;
-        background-color: #dcfce7;
-        color: #166534;
-        padding: 2px 8px;
-        border-radius: 12px;
-        margin-left: 6px;
-    }
-    div[data-testid="stCameraInput"] {
-        border-radius: 12px;
-        overflow: hidden;
-    }
+
+    /* Tab & Inputs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
+        gap: 8px;
     }
     .stTabs [data-baseweb="tab"] {
-        padding-top: 8px;
-        padding-bottom: 8px;
+        padding: 8px 16px;
         font-weight: 600;
         font-size: 0.88rem;
+        border-radius: 8px;
+    }
+    div[data-testid="stCameraInput"] {
+        border-radius: 14px;
+        overflow: hidden;
+        border: 2px dashed #10b981;
     }
     button {
         border-radius: 10px !important;
     }
-    .treatment-card {
-        background: #ffffff;
-        border: 1.5px solid #e2e8f0;
-        border-left: 5px solid #16a34a;
-        border-radius: 12px;
-        padding: 14px 16px;
-        margin: 14px 0 16px 0;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+    /* Footer */
+    .pro-footer {
+        text-align: center;
+        padding: 28px 10px 14px 10px;
+        color: #94a3b8;
+        font-size: 0.82rem;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 36px;
+        line-height: 1.6;
     }
-    .treatment-header {
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: #15803d;
-        margin-bottom: 6px;
-    }
-    .treatment-section {
-        margin-top: 6px;
-        font-size: 0.92rem;
-        color: #374151;
-        line-height: 1.45;
-    }
-    .treatment-label {
-        font-weight: 700;
-        color: #111827;
+    .pro-footer b {
+        color: #475569;
     }
 </style>
-<div class="main-header">
-    <div class="main-title">🌿 Rimbo AI — Plant & Disease</div>
-    <div class="main-subtitle">Diagnosa Cerdas Tanaman & Penyakit Daun + Visualisasi XAI</div>
+
+<!-- Hero Section -->
+<div class="hero-banner">
+    <div class="hero-badge">
+        <span class="pulse-dot"></span> SMART AGRITECH & PHYTOPATHOLOGY AI
+    </div>
+    <div class="hero-title">Rimbo<span>AI</span></div>
+    <div class="hero-desc">
+        Sistem Pakar Diagnosis Kesehatan Tanaman & Deteksi Dini Penyakit Daun berbasis Deep Learning Dual-Head dengan Transparansi Explainable AI (Eigen-CAM).
+    </div>
+    <div class="stats-row">
+        <div class="stat-pill">🌿 <b>10</b> Komoditas</div>
+        <div class="stat-pill">🔬 <b>24</b> Jenis Penyakit</div>
+        <div class="stat-pill">⚡ <b>0.3s</b> Inferensi CPU</div>
+        <div class="stat-pill">👁️ <b>Eigen-CAM</b> XAI Visual</div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -292,15 +541,15 @@ if len(model.outputs) != 2:
 
 # ---------- sidebar controls ----------
 with st.sidebar:
-    st.header("⚙️ Pengaturan")
+    st.header("⚙️ Pengaturan Studio")
     alpha = st.slider("Transparansi Overlay Heatmap", 0.1, 0.9, 0.35, 0.05)
     topk = st.slider("Jumlah Top-K Prediksi", 1, 10, 5)
-    img_size_sel = st.select_slider("Ukuran Input Model", options=[128, 160, 192, 224, 256, 299], value=224)
+    img_size_sel = st.select_slider("Ukuran Input Model (px)", options=[128, 160, 192, 224, 256, 299], value=224)
     st.markdown("---")
-    st.caption("🤖 **Model:** NasNetMobile Dual-Head  \n🔬 **XAI:** Eigen-CAM (Class-agnostic)")
+    st.caption("🤖 **Arsitektur:** NasNetMobile Dual-Head  \n🔬 **Metode XAI:** Eigen-CAM (SVD Activation)  \n🌱 **Corpus:** 10 Tanaman & 24 Patogen")
 
 # ---------- pilihan input: Upload Berkas (Default) vs Kamera Smartphone ----------
-st.markdown("##### 📥 Sumber Foto Daun:")
+st.markdown('<div class="section-head">📸 Pilih Metode Input Foto Daun</div>', unsafe_allow_html=True)
 input_source = st.radio(
     "Pilih Sumber Foto:",
     ["📁 Upload Berkas / Galeri", "📷 Kamera Smartphone Langsung"],
@@ -312,13 +561,13 @@ input_source = st.radio(
 images_to_process = []
 
 if "Kamera" in input_source:
-    st.caption("👉 Arahkan kamera smartphone ke daun tanaman, lalu tekan tombol foto.")
+    st.caption("👉 Arahkan kamera smartphone ke daun tanaman yang bergejala sakit, lalu tekan tombol ambil foto.")
     cam_file = st.camera_input("Arahkan kamera ke daun tanaman", label_visibility="collapsed")
     if cam_file is not None:
         images_to_process.append((cam_file, "Foto Kamera"))
 else:
     uploaded_files = st.file_uploader(
-        "Pilih atau seret foto daun dari perangkat (JPG, JPEG, PNG):",
+        "Pilih atau seret foto daun (Format: JPG, JPEG, PNG):",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True
     )
@@ -326,12 +575,72 @@ else:
         for f in uploaded_files:
             images_to_process.append((f, f.name))
 
+# ---------- Landing Page Showcase jika belum ada gambar ----------
 if not images_to_process:
-    st.info("💡 Silakan unggah foto daun atau beralih ke opsi Kamera Smartphone untuk memulai diagnosa.")
+    st.markdown('<div class="section-head">🚀 Alur Kerja Diagnosis Cerdas</div>', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("""
+        <div class="step-card">
+            <div class="step-num">1</div>
+            <div class="step-title">Ambil Foto Daun</div>
+            <div class="step-desc">Unggah foto dari galeri atau potret langsung daun di kebun via kamera ponsel.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c2:
+        st.markdown("""
+        <div class="step-card">
+            <div class="step-num">2</div>
+            <div class="step-title">Analisis Dual-Head AI</div>
+            <div class="step-desc">Neural network NasNetMobile mendeteksi spesies tanaman & memprediksi jenis patogen.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c3:
+        st.markdown("""
+        <div class="step-card">
+            <div class="step-num">3</div>
+            <div class="step-title">Resep & Peta XAI</div>
+            <div class="step-desc">Dapatkan protokol penanganan terpadu serta visualisasi heatmap Eigen-CAM transparan.</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="section-head">🌿 10 Komoditas Tanaman yang Didukung</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="crop-grid">
+        <span class="crop-pill">🍅 Tomat (Tomato)</span>
+        <span class="crop-pill">🍆 Terong (Eggplant)</span>
+        <span class="crop-pill">🥒 Mentimun (Cucumber)</span>
+        <span class="crop-pill">🍈 Pare (Bitter Gourd)</span>
+        <span class="crop-pill">🫘 Kacang Panjang (Cowpea)</span>
+        <span class="crop-pill">🫛 Buncis (Bean)</span>
+        <span class="crop-pill">🥦 Kembang Kol (Cauliflower)</span>
+        <span class="crop-pill">🥢 Lobak (Radish)</span>
+        <span class="crop-pill">🍃 Daun Sirih (Betel Leaf)</span>
+        <span class="crop-pill">🎃 Labu Air (Bottle Gourd)</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.expander("💡 Panduan Pengambilan Foto Terbaik untuk Hasil Akurat", expanded=False):
+        st.markdown("""
+        * **Fokus pada Gejala Sakit:** Pastikan bercak daun atau tanda penyakit berada di tengah bidang foto.
+        * **Pencahayaan Alami Cukup:** Ambil foto dengan cahaya terang alami dan hindari bayangan tangan/badan.
+        * **Latar Belakang Bersih:** Hindari foto yang terlalu jauh atau memuat banyak tanaman lain sekaligus.
+        * **Jarak Pemotretan:** Jarak ideal kamera dengan permukaan daun adalah sekitar 15 – 30 cm.
+        """)
+
+    st.markdown("""
+    <div class="pro-footer">
+        <b>RimboAI</b> • Platform Diagnosis Kesehatan Tanaman Berbasis Explainable AI (XAI) & Deep Learning<br>
+        <i>Prototype Riset Publikasi & Inovasi Pertanian Presisi Digital © 2026</i>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
-# ---------- proses tiap gambar ----------
+# ---------- Proses Tiap Gambar Terupload / Terfoto ----------
 for up_file, up_name in images_to_process:
+    report_id = f"RBO-{str(uuid.uuid4())[:6].upper()}"
+    timestamp = datetime.datetime.now().strftime("%d %b %Y, %H:%M WIB")
+
     orig = Image.open(up_file).convert("RGB")
     arr = preprocess_pil(orig, (img_size_sel, img_size_sel))
     batch = np.expand_dims(arr, axis=0).astype("float32")
@@ -351,43 +660,70 @@ for up_file, up_name in images_to_process:
     d_lbl = disease_labels[d_idx] if d_idx < len(disease_labels) else f"class_{d_idx}"
     p_conf = p_probs[0][p_idx] * 100
     d_conf = d_probs[0][d_idx] * 100
+    is_healthy = "healthy" in d_lbl.lower()
 
-    # Kartu Hasil Diagnosa Utama (Elegan & Mobile-friendly)
+    # Kartu Hasil Diagnosa Klinis
     st.markdown(f"""
-    <div class="diagnosis-card">
-        <div style="font-weight: 700; color: #166534; margin-bottom: 6px;">📋 Hasil Diagnosa ({up_name})</div>
-        <div class="diagnosis-item">
-            <span class="diag-label">🌿 Jenis Tanaman</span>
-            <div><span class="diag-val">{p_lbl}</span><span class="diag-badge">{p_conf:.1f}%</span></div>
+    <div class="clinic-card">
+        <div class="clinic-header">
+            <div class="clinic-title">📋 Laporan Diagnosa Fitopatologi ({up_name})</div>
+            <div class="clinic-id">ID: {report_id} • {timestamp}</div>
         </div>
-        <div class="diagnosis-item">
-            <span class="diag-label">🦠 Dugaan Penyakit</span>
-            <div><span class="diag-val" style="color: {'#15803d' if 'healthy' in d_lbl.lower() else '#b91c1c'};">{d_lbl}</span><span class="diag-badge">{d_conf:.1f}%</span></div>
+        <div class="clinic-body">
+            <div class="clinic-grid">
+                <div class="metric-box">
+                    <div class="metric-label">🌿 Komoditas Tanaman</div>
+                    <div class="metric-val">{p_lbl}</div>
+                    <span class="metric-badge" style="background:#dcfce7; color:#15803d; border:1px solid #86efac;">
+                        Akurasi Model: {p_conf:.1f}%
+                    </span>
+                </div>
+                <div class="metric-box {'metric-box-healthy' if is_healthy else 'metric-box-disease'}">
+                    <div class="metric-label">🦠 Hasil Diagnosa Patogen</div>
+                    <div class="metric-val" style="color: {'#15803d' if is_healthy else '#b91c1c'};">{d_lbl}</div>
+                    <span class="metric-badge" style="background:{'#dcfce7' if is_healthy else '#fee2e2'}; color:{'#15803d' if is_healthy else '#b91c1c'}; border:1px solid {'#86efac' if is_healthy else '#fca5a5'};">
+                        {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • Kepastian: {d_conf:.1f}%
+                    </span>
+                </div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Narasi Gejala & Rekomendasi Penanganan Agronomi
+    # Protokol Resep Pengendalian Fitopatologi
     d_info = get_disease_details(d_lbl)
     st.markdown(f"""
-    <div class="treatment-card">
-        <div class="treatment-header">🩺 Informasi & Rekomendasi: {d_info['nama_id']}</div>
-        <div class="treatment-section">
-            <span class="treatment-label">🔬 Patogen Penyebab:</span> {d_info['penyebab']}
+    <div class="rx-box">
+        <div class="rx-header">
+            🩺 <b>Protokol Pengendalian & Panduan Agronomi Terpadu</b>
         </div>
-        <div class="treatment-section">
-            <span class="treatment-label">🔍 Gejala Khas:</span> {d_info['gejala']}
+        <div class="rx-row">
+            <span class="rx-tag">🔬 Nama Penyakit & Etiologi:</span> <b>{d_info['nama_id']}</b> ({d_info['penyebab']})
         </div>
-        <div class="treatment-section" style="border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 8px;">
-            <span class="treatment-label" style="color: #15803d;">💊 Langkah Pengendalian & Penanganan:</span>
+        <div class="rx-row">
+            <span class="rx-tag">🔍 Gejala Klinis Lapangan:</span> {d_info['gejala']}
+        </div>
+        <div class="rx-row" style="border-top: 1px dashed #cbd5e1; padding-top: 10px; margin-top: 10px;">
+            <span class="rx-tag" style="color: #047857;">💊 Langkah Pengendalian Terpadu (PHT):</span>
             <ul style="margin: 6px 0 0 18px; padding: 0;">
-                {''.join([f'<li style="margin-bottom: 4px;">{step}</li>' for step in d_info['penanganan']])}
+                {''.join([f'<li style="margin-bottom: 5px;">{step}</li>' for step in d_info['penanganan']])}
             </ul>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Visualisasi XAI & Foto (Menggunakan Tab Responsif untuk Smartphone)
+    # Studio Visualisasi Explainable AI (Eigen-CAM)
+    st.markdown('<div class="section-head">👁️ Studio Transparansi Visual (Eigen-CAM XAI)</div>', unsafe_allow_html=True)
+    st.caption("Visualisasi atensi konvolusi memperlihatkan area daun spesifik yang menjadi dasar utama model dalam mendiagnosa penyakit.")
+
+    st.markdown("""
+    <div class="xai-legend">
+        <span>🟦 Area Daun Sehat / Latar</span>
+        <div class="gradient-bar"></div>
+        <span>🟥 Fokus Infeksi Patogen</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     acts, last_name, err = get_acts_safe(model, batch)
 
     if acts is not None:
@@ -395,29 +731,38 @@ for up_file, up_name in images_to_process:
         overlay_img = overlay_heatmap_on_img(orig, heat, alpha=alpha)
         heat_only   = colorize_only(heat, orig.size)
 
-        tab_overlay, tab_heat, tab_orig = st.tabs(["✨ Visualisasi Overlay XAI", "🔥 Heatmap Saja", "📷 Foto Asli"])
+        tab_overlay, tab_heat, tab_orig = st.tabs([
+            "✨ Overlay Atensi AI", 
+            "🔥 Peta Panas (Heatmap Murni)", 
+            "📷 Foto Asli Daun"
+        ])
         with tab_overlay:
-            st.image(overlay_img, caption="Area merah/kuning adalah fokus model dalam mendeteksi gejala.", use_container_width=True)
+            st.image(overlay_img, caption=f"Visualisasi Overlay Eigen-CAM (Layer: {last_name})", use_container_width=True)
         with tab_heat:
-            st.image(heat_only, caption=f"Peta Aktivasi Konvolusi ({last_name})", use_container_width=True)
+            st.image(heat_only, caption="Aktivasi Fitur Konvolusi 4D Terakhir", use_container_width=True)
         with tab_orig:
-            st.image(orig, caption="Foto Daun Asli", use_container_width=True)
+            st.image(orig, caption="Foto Daun yang Dianalisis", use_container_width=True)
     else:
         st.warning(f"EigenCAM belum dapat dirender: {err}")
         st.image(orig, caption="Foto Daun Asli", use_container_width=True)
 
-    # Detail Probabilitas Top-K
-    with st.expander("📊 Lihat Detail Probabilitas Lainnya (Top-K)", expanded=False):
+    # Matriks Probabilitas Lengkap (Top-K)
+    with st.expander("📊 Matriks Probabilitas Lengkap (Top-K Candidates)", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown("**Top-K Tanaman**")
+            st.markdown("**Probabilitas Varietas Tanaman**")
             for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
                 st.progress(p, text=f"{lbl}: {p*100:.1f}%")
         with c2:
-            st.markdown("**Top-K Penyakit**")
+            st.markdown("**Probabilitas Dugaan Penyakit**")
             for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
                 st.progress(p, text=f"{lbl}: {p*100:.1f}%")
 
     st.markdown("---")
 
-st.caption("ℹ️ Tips: Buka menu samping (ikon panah kiri atas) untuk mengatur transparansi overlay atau Top-K.")
+st.markdown("""
+<div class="pro-footer">
+    <b>RimboAI</b> • Platform Diagnosis Kesehatan Tanaman Berbasis Explainable AI (XAI) & Deep Learning<br>
+    <i>Prototype Riset Publikasi & Inovasi Pertanian Presisi Digital © 2026</i>
+</div>
+""", unsafe_allow_html=True)
