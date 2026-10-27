@@ -4,6 +4,7 @@ import os, io, pickle, uuid, datetime
 from typing import Optional, Tuple, List
 
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 import numpy as np
 import tensorflow as tf
@@ -65,11 +66,42 @@ st.markdown("""
         width: 0px !important;
     }
 
-    /* HIDE STREAMLIT FOOTER, MANAGE BADGE, AND GITHUB/VIEWER BADGES */
-    footer, [data-testid="manage-app-button"], div[class*="viewerBadge"], [data-testid="stStatusWidget"] {
+    /* HIDE STREAMLIT FOOTER, MANAGE BADGE, AND GITHUB/VIEWER BADGES COMPLETELY */
+    footer,
+    [data-testid="stFooter"],
+    [data-testid="manage-app-button"],
+    [data-testid="stStatusWidget"],
+    [data-testid="stDecoration"],
+    [data-testid="stToolbar"],
+    div[class*="viewerBadge"],
+    a[class*="viewerBadge"],
+    div[class*="ViewerBadge"],
+    a[class*="ViewerBadge"],
+    [class*="viewerBadge_container"],
+    [class*="viewerBadge_link"],
+    [class*="viewerBadge_divider"],
+    div[class*="ProfileButton"],
+    div[class*="manageApp"],
+    div[id*="manage-app"],
+    a[href*="streamlit.io"],
+    a[href*="github.com"],
+    div:has(> a[href*="streamlit.io"]),
+    div:has(> a[href*="github.com"]),
+    div[class*="floatingMenu"],
+    div[class*="FloatingMenu"],
+    div[class*="floating-menu"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
         height: 0px !important;
+        width: 0px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        position: absolute !important;
+        top: -9999px !important;
+        left: -9999px !important;
     }
 
     /* Responsive Mobile Screen Shell */
@@ -598,6 +630,35 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# Client-Side DOM Script to Continuously Suppress Streamlit Cloud Badges
+components.html("""
+<script>
+function suppressBadges() {
+    try {
+        const rootDoc = window.parent ? window.parent.document : document;
+        const query = [
+            'footer',
+            '[data-testid="stFooter"]',
+            '[data-testid="manage-app-button"]',
+            '[data-testid="stStatusWidget"]',
+            '[class*="viewerBadge"]',
+            '[class*="ViewerBadge"]',
+            'a[href*="streamlit.io"]',
+            'a[href*="github.com"]'
+        ].join(',');
+        rootDoc.querySelectorAll(query).forEach(el => {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+        });
+    } catch (e) {}
+}
+setInterval(suppressBadges, 500);
+document.addEventListener("DOMContentLoaded", suppressBadges);
+</script>
+""", height=0, width=0)
 
 # ---------- Util Umum ----------
 DEFAULT_PLANTS = ["Bean","Betel Leaf","Bitter Gourd","Bottle gourd","Cauliflower",
