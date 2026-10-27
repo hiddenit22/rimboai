@@ -1,6 +1,6 @@
 # app.py — RimboAI: Mobile Field Utility for Plant Pathology Diagnostics
 # ------------------------------------------------------------------------
-import os, io, pickle, uuid, datetime
+import os, io, pickle, uuid, datetime, base64, requests
 from typing import Optional, Tuple, List
 
 import streamlit as st
@@ -666,6 +666,46 @@ st.markdown("""
         flex-shrink: 0;
     }
 
+    /* Multimodal Gemini Second Opinion Card */
+    .gemini-card {
+        background: #ffffff;
+        border: 1.5px solid #93c5fd;
+        border-top: 3.5px solid #2563eb;
+        margin: 16px 0;
+        box-shadow: 0 1px 4px rgba(37, 99, 235, 0.08);
+    }
+    .gemini-header {
+        background: #eff6ff;
+        padding: 10px 14px;
+        border-bottom: 1px solid #bfdbfe;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .gemini-title {
+        font-size: 0.8rem;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        color: #1e40af;
+        text-transform: uppercase;
+    }
+    .gemini-badge {
+        background: #dbeafe;
+        border: 1px solid #93c5fd;
+        color: #1d4ed8;
+        font-size: 0.68rem;
+        font-weight: 800;
+        padding: 3px 8px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+    .gemini-body {
+        padding: 14px;
+        font-size: 0.84rem;
+        color: #1e293b;
+        line-height: 1.6;
+    }
+
     /* Footer */
     .app-footer {
         text-align: center;
@@ -973,6 +1013,107 @@ def get_acts_safe(model: tf.keras.Model, batch: np.ndarray):
 
     return None, getattr(last_conv, "name", "unknown"), "Tidak dapat mengekstrak activation map."
 
+# ---------- Gemini Multimodal Helper (Direct REST, Zero gRPC Conflict) ----------
+def get_gemini_api_key() -> str:
+    # 1. Prioritas Streamlit Secrets (.streamlit/secrets.toml atau Cloud Secrets)
+    try:
+        if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+            k = str(st.secrets["GEMINI_API_KEY"]).strip()
+            if k:
+                return k
+    except Exception:
+        pass
+    # 2. Prioritas Environment Variable OS
+    env_k = os.getenv("GEMINI_API_KEY", "").strip()
+    if env_k:
+        return env_k
+    # 3. Prioritas Input Manual User di Sidebar
+    return str(st.session_state.get("gemini_user_key", "")).strip()
+
+def verify_with_gemini(
+    api_key: str,
+    pil_img: Image.Image,
+    p_lbl: str,
+    p_conf: float,
+    d_lbl: str,
+    d_conf: float,
+    top_plants: list,
+    top_diseases: list
+) -> Tuple[bool, str]:
+    try:
+        buf = io.BytesIO()
+        img_copy = pil_img.copy()
+        img_copy.thumbnail((800, 800))
+        img_copy.convert("RGB").save(buf, format="JPEG", quality=85)
+        b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+        
+        p_alts = ", ".join([f"{lbl} ({c*100:.1f}%)" for lbl, c in top_plants[1:4]])
+        d_alts = ", ".join([f"{lbl} ({c*100:.1f}%)" for lbl, c in top_diseases[1:4]])
+        
+        prompt = f"""Anda adalah Pakar Fitopatologi Tanaman & Dokter Daun Ahli.
+Model AI deep learning (NasNetMobile) menganalisis foto daun tanaman terlampir dan menghasilkan prediksi awal:
+- Komoditas Tanaman: {p_lbl} (Kepercayaan CNN: {p_conf:.1f}%)
+  Kandidat Alternatif: {p_alts or 'Tidak ada'}
+- Diagnosa Patogen/Penyakit: {d_lbl} (Kepercayaan CNN: {d_conf:.1f}%)
+  Kandidat Alternatif: {d_alts or 'Tidak ada'}
+
+Tugas Anda:
+Lakukan penalaran visual mendalam pada helai daun di gambar:
+1. Analisis Fitur Visual: Periksa bentuk bercak, pola tepi lesi (menyebar/tegas), warna (klorosis/nekrotik), urat daun, dan siluet helai daun.
+2. Kesimpulan Verifikasi: 
+   - Tentukan apakah Anda SETUJU dengan diagnosa model CNN ({d_lbl} pada {p_lbl}) atau memiliki DIAGNOSA ALTERNATIF (misal: penyakit jamur/bakteri/virus lain, hama, atau defisiensi hara/fisiologis).
+3. Rekomendasi Lapangan Cepat: Berikan 2 tindakan terpadu yang paling mendesak dilakukan petani.
+
+Format Jawaban (Tuliskan langsung dalam format rapi ini):
+**Status Verifikasi:** [TERKONFIRMASI KONSISTEN atau DIAGNOSA KOREKSI]
+**Diagnosa Akhir Pakar:** [Nama Penyakit] pada [Nama Tanaman]
+**Tingkat Keyakinan:** [Tinggi / Sedang / Cukup]
+
+#### 🔍 Analisis Gejala Visual:
+[2-3 kalimat penjelasan fitur fisik daun yang mendasari kesimpulan Anda]
+
+#### 🩺 Rekomendasi Tindakan Cepat:
+- [Tindakan 1]
+- [Tindakan 2]
+"""
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"inline_data": {"mime_type": "image/jpeg", "data": b64_img}},
+                        {"text": prompt}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 900
+            }
+        }
+        
+        candidate_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]
+        last_err = ""
+        
+        for model_name in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            try:
+                res = requests.post(url, json=payload, timeout=25)
+                if res.status_code == 200:
+                    data = res.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        if text:
+                            return True, text
+                else:
+                    last_err = f"{model_name} (HTTP {res.status_code}): {res.text[:120]}"
+            except Exception as e_sub:
+                last_err = str(e_sub)
+                
+        return False, f"Layanan Gemini sedang sibuk atau respons tidak valid ({last_err}). Silakan coba sesaat lagi."
+    except Exception as ex:
+        return False, f"Terjadi kesalahan saat memproses gambar: {str(ex)}"
+
 # ---------- Cache: Load Model & Encoders Sekali ----------
 @st.cache_resource(show_spinner=False)
 def load_encoders(plant_pkl_path: Optional[str], disease_pkl_path: Optional[str]):
@@ -1026,6 +1167,19 @@ with st.sidebar:
     img_size_sel = st.select_slider("Ukuran Input Model (px)", options=[128, 160, 192, 224, 256, 299], value=224)
     st.markdown("---")
     st.caption("🤖 **Arsitektur:** NasNetMobile Dual-Head  \n🔬 **Metode XAI:** Eigen-CAM (SVD Activation)  \n🌱 **Cakupan:** 10 Tanaman & 24 Patogen")
+    st.markdown("---")
+    st.markdown("### 🧠 Pakar Multimodal (Gemini)")
+    active_key = get_gemini_api_key()
+    if active_key:
+        masked = active_key[:6] + "..." + active_key[-4:] if len(active_key) > 10 else "Tersedia"
+        st.success(f"● Gemini Terhubung ({masked})")
+    else:
+        st.text_input(
+            "Gemini API Key (Opsional)",
+            type="password",
+            key="gemini_user_key",
+            help="Masukkan API key dari Google AI Studio jika belum disetting di secrets."
+        )
 
 # ---------- State Management Foto Tunggal & Reset Uploader ----------
 if "uploader_key" not in st.session_state:
@@ -1034,6 +1188,8 @@ if "active_photo" not in st.session_state:
     st.session_state["active_photo"] = None
 if "active_name" not in st.session_state:
     st.session_state["active_name"] = ""
+if "gemini_result" not in st.session_state:
+    st.session_state["gemini_result"] = None
 
 # Jika belum ada foto aktif: Tampilkan Pemilih Sumber & Kotak Upload Tunggal
 if st.session_state["active_photo"] is None:
@@ -1063,6 +1219,7 @@ if st.session_state["active_photo"] is None:
         if cam_file is not None:
             st.session_state["active_photo"] = Image.open(cam_file).convert("RGB")
             st.session_state["active_name"] = "Foto Kamera Langsung"
+            st.session_state["gemini_result"] = None
             st.rerun()
     else:
         uploaded_file = st.file_uploader(
@@ -1075,6 +1232,7 @@ if st.session_state["active_photo"] is None:
         if uploaded_file is not None:
             st.session_state["active_photo"] = Image.open(uploaded_file).convert("RGB")
             st.session_state["active_name"] = uploaded_file.name
+            st.session_state["gemini_result"] = None
             st.rerun()
 else:
     # Foto sudah aktif: Sembunyikan uploader dan tampilkan status foto aktif + tombol upload ulang
@@ -1091,6 +1249,7 @@ else:
     if st.button("🔄 Ganti Foto / Upload Ulang Daun Baru", key="btn_reupload", use_container_width=True):
         st.session_state["active_photo"] = None
         st.session_state["active_name"] = ""
+        st.session_state["gemini_result"] = None
         st.session_state["uploader_key"] += 1
         st.rerun()
 
@@ -1243,6 +1402,49 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ---------- Verifikasi Multimodal AI (Second Opinion Pakar) ----------
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-bar" style="background:#2563eb;"></div>
+    <div class="sec-title">Pakar Multimodal AI (Second Opinion)</div>
+</div>
+""", unsafe_allow_html=True)
+
+gemini_key = get_gemini_api_key()
+
+if not gemini_key:
+    st.info("💡 **Tips Verifikasi:** Untuk mengaktifkan ulasan pakar visual multimodal (Gemini), masukkan API Key pada sidebar atau daftarkan di Streamlit Secrets.")
+else:
+    c_btn, c_note = st.columns([1.6, 1])
+    with c_btn:
+        btn_gemini = st.button("🧠 Minta Verifikasi Pakar AI (Gemini)", key="btn_run_gemini", use_container_width=True)
+    with c_note:
+        st.caption("✨ Menganalisis morfologi bercak daun untuk memvalidasi diagnosa CNN.")
+
+    if btn_gemini:
+        with st.spinner("Mengirimkan citra daun & data prediksi ke Gemini Vision..."):
+            top_p_list = topk_list(p_probs[0], plant_labels, k=4)
+            top_d_list = topk_list(d_probs[0], disease_labels, k=4)
+            ok, response_text = verify_with_gemini(
+                gemini_key, target_img, p_lbl, p_conf, d_lbl, d_conf, top_p_list, top_d_list
+            )
+            if ok:
+                st.session_state["gemini_result"] = response_text
+            else:
+                st.error(response_text)
+
+if st.session_state.get("gemini_result"):
+    st.markdown("""
+    <div class="gemini-card">
+        <div class="gemini-header">
+            <div class="gemini-title">🧠 HASIL VERIFIKASI PAKAR MULTIMODAL AI (GEMINI)</div>
+            <div class="gemini-badge">● TERVERIFIKASI</div>
+        </div>
+        <div class="gemini-body">
+    """, unsafe_allow_html=True)
+    st.markdown(st.session_state["gemini_result"])
+    st.markdown("</div></div>", unsafe_allow_html=True)
+
 # Studio Visualisasi Explainable AI (Dual-Perspective CAM)
 st.markdown("""
 <div class="sec-header">
@@ -1311,6 +1513,7 @@ st.markdown("---")
 if st.button("🔄 Uji Daun Lain (Hapus & Upload Ulang)", key="btn_bottom_reupload", use_container_width=True):
     st.session_state["active_photo"] = None
     st.session_state["active_name"] = ""
+    st.session_state["gemini_result"] = None
     st.session_state["uploader_key"] += 1
     st.rerun()
 
