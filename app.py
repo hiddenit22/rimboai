@@ -755,22 +755,7 @@ DEFAULT_DISEASES = [
     "Tomato leaf curl virus", "Tomato spotted wilt"
 ]
 
-PLANT_TRANSLATION = {
-    "bean": "Buncis",
-    "betel leaf": "Daun Sirih",
-    "bitter gourd": "Pare",
-    "bottle gourd": "Labu Air",
-    "cauliflower": "Kembang Kol",
-    "cowpea": "Kacang Panjang",
-    "cucumber": "Mentimun",
-    "eggplant": "Terong",
-    "radish": "Lobak",
-    "tomato": "Tomat"
-}
-
-def get_plant_name_id(eng_name: str) -> str:
-    key = str(eng_name).strip().lower()
-    return PLANT_TRANSLATION.get(key, eng_name)
+# Helper inferensi & pra-pemrosesan
 
 def preprocess_pil(img: Image.Image, img_size=(224,224)) -> np.ndarray:
     img = img.convert("RGB").resize(img_size, Image.BILINEAR)
@@ -1148,16 +1133,16 @@ if target_img is None:
         <div class="sec-title">10 Komoditas yang Didukung</div>
     </div>
     <div class="crop-grid">
-        <div class="crop-box">🍅 TOMAT</div>
-        <div class="crop-box">🍆 TERONG</div>
-        <div class="crop-box">🥒 MENTIMUN</div>
-        <div class="crop-box">🍈 PARE</div>
-        <div class="crop-box">🫘 KACANG PANJANG</div>
-        <div class="crop-box">🫛 BUNCIS</div>
-        <div class="crop-box">🥦 KEMBANG KOL</div>
-        <div class="crop-box">🥢 LOBAK</div>
-        <div class="crop-box">🍃 DAUN SIRIH</div>
-        <div class="crop-box">🎃 LABU AIR</div>
+        <div class="crop-box">🍅 TOMATO</div>
+        <div class="crop-box">🍆 EGGPLANT</div>
+        <div class="crop-box">🥒 CUCUMBER</div>
+        <div class="crop-box">🍈 BITTER GOURD</div>
+        <div class="crop-box">🫘 COWPEA</div>
+        <div class="crop-box">🫛 BEAN</div>
+        <div class="crop-box">🥦 CAULIFLOWER</div>
+        <div class="crop-box">🥢 RADISH</div>
+        <div class="crop-box">🍃 BETEL LEAF</div>
+        <div class="crop-box">🎃 BOTTLE GOURD</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1207,11 +1192,9 @@ d_lbl = disease_labels[d_idx] if d_idx < len(disease_labels) else f"class_{d_idx
 p_conf = float(p_probs[0][p_idx] * 100)
 d_conf = float(d_probs[0][d_idx] * 100)
 is_healthy = "healthy" in d_lbl.lower()
-p_name_id = get_plant_name_id(p_lbl)
 d_info = get_disease_details(d_lbl)
-d_name_id = d_info.get("nama_id", d_lbl)
 
-# Kartu Hasil Diagnosa (Mobile Layout) — Dilengkapi Nama Bahasa Indonesia
+# Kartu Hasil Diagnosa (Mobile Layout)
 st.markdown(f"""
 <div class="result-card">
     <div class="result-top">
@@ -1222,16 +1205,14 @@ st.markdown(f"""
         <div class="result-metrics">
             <div class="metric-cell">
                 <div class="cell-label">Varietas Tanaman</div>
-                <div class="cell-val">{p_name_id}</div>
-                <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{p_lbl}</i></div>
+                <div class="cell-val">{p_lbl}</div>
                 <span class="cell-pill pill-green">
                     Akurasi: {p_conf:.1f}%
                 </span>
             </div>
             <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
                 <div class="cell-label">Diagnosa Patogen</div>
-                <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_name_id}</div>
-                <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{d_lbl}</i></div>
+                <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_lbl}</div>
                 <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
                     {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • {d_conf:.1f}%
                 </span>
@@ -1248,8 +1229,8 @@ st.markdown(f"""
 <div class="rx-card">
     <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
     <div class="rx-section">
-        <div class="rx-caption">Nama Penyakit & Penyebab</div>
-        <div class="rx-val"><b>{d_info['nama_id']}</b> ({d_info['penyebab']})</div>
+        <div class="rx-caption">Penyakit & Patogen</div>
+        <div class="rx-val"><b>{d_lbl}</b> ({d_info['penyebab']})</div>
     </div>
     <div class="rx-section">
         <div class="rx-caption">Karakteristik Gejala Lapangan</div>
@@ -1320,14 +1301,11 @@ with st.expander("📊 Matriks Probabilitas Lengkap (Top-K)", expanded=False):
     with c1:
         st.markdown("**Komoditas Tanaman**")
         for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
-            id_name = get_plant_name_id(lbl)
-            st.progress(p, text=f"{id_name} ({lbl}): {p*100:.1f}%")
+            st.progress(p, text=f"{lbl}: {p*100:.1f}%")
     with c2:
         st.markdown("**Dugaan Penyakit**")
         for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
-            d_detail = get_disease_details(lbl)
-            d_id = d_detail.get('nama_id', lbl)
-            st.progress(p, text=f"{d_id}: {p*100:.1f}%")
+            st.progress(p, text=f"{lbl}: {p*100:.1f}%")
 
 st.markdown("---")
 if st.button("🔄 Uji Daun Lain (Hapus & Upload Ulang)", key="btn_bottom_reupload", use_container_width=True):
