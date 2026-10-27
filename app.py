@@ -755,35 +755,62 @@ def eigen_cam_from_acts(acts: np.ndarray) -> np.ndarray:
     X = X - X.mean(axis=0, keepdims=True)
     _, _, Vt = np.linalg.svd(X, full_matrices=False)
     pc1 = Vt[0]
-    heat = (X @ pc1).reshape(H, W)
-    heat = np.abs(heat)
+    proj = (X @ pc1).reshape(H, W)
+
+    # Pastikan orientasi positif mengarah pada fitur berenergi tinggi (lesi), bukan background
+    if abs(proj.min()) > proj.max():
+        proj = -proj
+
+    # Terapkan ReLU: buang aktivasi negatif / background murni (jangan gunakan np.abs)
+    heat = np.maximum(proj, 0.0)
     m = heat.max()
-    if m > 0: heat = heat / m
+    if m > 0:
+        heat = heat / m
     return heat
 
-def overlay_heatmap_on_img(orig_img: Image.Image, heat01: np.ndarray, alpha: float = 0.45, cutoff: float = 0.25) -> Image.Image:
+def get_leaf_mask(orig_rgb: np.ndarray) -> np.ndarray:
+    gray = cv2.cvtColor(orig_rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY)
+    # Deteksi piksel bukan latar putih/sangat terang dan bukan hitam pekat
+    not_white = (gray <= 238).astype(np.float32)
+    not_black = (gray >= 15).astype(np.float32)
+    mask = not_white * not_black
+    # Jika foto kebun alami atau latar belakang kompleks (> 85% terisi), gunakan mask penuh
+    if mask.mean() < 0.04:
+        return np.ones_like(gray, dtype=np.float32)
+    # Dilation halus agar tepi helai daun tidak terpotong kasar
+    mask_u8 = (mask * 255).astype(np.uint8)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    mask_u8 = cv2.dilate(mask_u8, kernel, iterations=2)
+    return mask_u8.astype(np.float32) / 255.0
+
+def overlay_heatmap_on_img(orig_img: Image.Image, heat01: np.ndarray, alpha: float = 0.50, cutoff: float = 0.15) -> Image.Image:
     orig = np.asarray(orig_img.convert("RGB")).astype(np.float32)
     h, w = orig.shape[:2]
 
     # 1. Resize heatmap ke ukuran dimensi gambar asli
     hm = cv2.resize(heat01, (w, h), interpolation=cv2.INTER_LINEAR)
 
-    # 2. Cutoff Thresholding: Potong aktivasi rendah yang meluber ke background
+    # 2. Segmentasi Siluet Daun: Isolasi daun dari latar belakang (kertas putih, meja, lantai)
+    leaf_mask = get_leaf_mask(orig)
+    hm = hm * leaf_mask
+
+    # 3. Cutoff Thresholding: Potong aktivasi residual non-lesi
     hm_thresh = np.maximum(hm - cutoff, 0.0)
     if hm_thresh.max() > 0:
         hm_thresh = hm_thresh / hm_thresh.max()
 
-    # 3. Pewarnaan Colormap JET
+    # 4. Pewarnaan Colormap JET
     hm_uint8 = (hm_thresh * 255).astype(np.uint8)
     hm_color = cv2.applyColorMap(hm_uint8, cv2.COLORMAP_JET)[:, :, ::-1].astype(np.float32)
 
-    # 4. Dynamic Alpha Blending:
-    # Hanya area dengan aktivasi kuat yang diberi warna; area latar belakang & daun sehat tetap 100% natural tanpa pewarnaan kabur
+    # 5. Dynamic Alpha Blending:
+    # Area latar belakang & daun sehat memiliki alpha = 0.0 (100% foto asli tanpa noda warna).
+    # Area infeksi menyala dengan kontras tajam langsung di atas bercak.
     alpha_mask = np.expand_dims(hm_thresh, axis=-1) * alpha
     blend = (alpha_mask * hm_color + (1.0 - alpha_mask) * orig).clip(0, 255).astype(np.uint8)
     return Image.fromarray(blend)
 
-def colorize_only(heat01: np.ndarray, size_hw: Tuple[int, int], cutoff: float = 0.25) -> Image.Image:
+def colorize_only(heat01: np.ndarray, size_hw: Tuple[int, int], cutoff: float = 0.15) -> Image.Image:
     w, h = size_hw
     hm = cv2.resize(heat01, (w, h), interpolation=cv2.INTER_LINEAR)
     hm_thresh = np.maximum(hm - cutoff, 0.0)
@@ -878,8 +905,8 @@ if len(model.outputs) != 2:
 with st.sidebar:
     st.markdown("### ⚙️ Pengaturan Studio")
     conf_thresh = st.slider("Batas Akurasi Valid (%)", 30, 80, 50, 5, help="Jika akurasi deteksi di bawah batas ini, sistem akan menampilkan status Tidak Terdeteksi / Tidak Dikenali.")
-    cam_cutoff = st.slider("Fokus Lesi Heatmap (Cutoff)", 0.0, 0.6, 0.25, 0.05, help="Memotong rembesan aktivasi ke latar belakang/tepi daun agar heatmap terkunci hanya pada fokus infeksi.")
-    alpha = st.slider("Intensitas Warna Heatmap", 0.1, 0.9, 0.45, 0.05)
+    cam_cutoff = st.slider("Fokus Lesi Heatmap (Cutoff)", 0.0, 0.5, 0.15, 0.05, help="Memotong rembesan aktivasi ke latar belakang/tepi daun agar heatmap terkunci hanya pada fokus infeksi.")
+    alpha = st.slider("Intensitas Warna Heatmap", 0.1, 0.9, 0.50, 0.05)
     topk = st.slider("Jumlah Top-K Prediksi", 1, 10, 5)
     img_size_sel = st.select_slider("Ukuran Input Model (px)", options=[128, 160, 192, 224, 256, 299], value=224)
     st.markdown("---")
