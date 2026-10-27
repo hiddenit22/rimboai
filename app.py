@@ -88,23 +88,39 @@ def get_acts_safe(model: tf.keras.Model, batch: np.ndarray):
     last_conv = _find_last_conv(model)
     if last_conv is None:
         return None, None, "Tidak menemukan conv layer 4D."
+
+    # 1) Direct call pada layer/backbone 4D (Sangat andal untuk Keras 3 Functional sub-model)
+    try:
+        acts = last_conv(batch, training=False)
+        acts = acts.numpy() if hasattr(acts, "numpy") else np.array(acts)
+        if acts.ndim == 4:
+            return acts, last_conv.name, None
+    except Exception:
+        pass
+
+    # 2) Fallback: Sub-model graph
     try:
         act_model = tf.keras.Model(model.inputs, last_conv.output)
         acts = act_model(batch, training=False)
         acts = acts.numpy() if hasattr(acts, "numpy") else np.array(acts)
         return acts, last_conv.name, None
-    except Exception as e1:
-        try:
-            acts = act_model.predict(batch, verbose=0)
-            return acts, last_conv.name, None
-        except Exception as e2:
+    except Exception:
+        pass
+
+    # 3) Fallback: telusuri sub-layer jika last_conv adalah nested model
+    if hasattr(last_conv, "layers"):
+        for sub in reversed(last_conv.layers):
             try:
-                K = tf.keras.backend
-                fn = K.function([model.input], [last_conv.output])
-                acts = fn([batch])[0]
-                return acts, last_conv.name, None
-            except Exception as e3:
-                return None, last_conv.name, f"{e1} || {e2} || {e3}"
+                shp = getattr(sub, "output_shape", None)
+                if isinstance(shp, tuple) and len(shp) == 4:
+                    sub_m = tf.keras.Model(last_conv.inputs, sub.output)
+                    acts = sub_m(batch, training=False)
+                    acts = acts.numpy() if hasattr(acts, "numpy") else np.array(acts)
+                    return acts, f"{last_conv.name}.{sub.name}", None
+            except Exception:
+                continue
+
+    return None, getattr(last_conv, "name", "unknown"), "Tidak dapat mengekstrak activation map."
 
 # ---------- cache: load model & encoders sekali ----------
 @st.cache_resource(show_spinner=False)
