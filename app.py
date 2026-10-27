@@ -638,88 +638,6 @@ st.markdown("""
         flex-shrink: 0;
     }
 
-    /* Batch Summary Table */
-    .batch-summary-box {
-        background: #ffffff;
-        border: 1.5px solid #cbd5e1;
-        border-top: 3px solid #16a34a;
-        padding: 12px 14px;
-        margin: 16px 0 16px 0;
-    }
-    .batch-summary-title {
-        font-size: 0.82rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #0f172a;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    .batch-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.78rem;
-    }
-    .batch-table th {
-        background: #f1f5f9;
-        color: #475569;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        padding: 8px 10px;
-        text-align: left;
-        border: 1px solid #cbd5e1;
-    }
-    .batch-table td {
-        padding: 8px 10px;
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-        vertical-align: middle;
-    }
-    .batch-table tr:hover {
-        background: #f8fafc;
-    }
-    .batch-status-healthy {
-        background: #dcfce7;
-        color: #15803d;
-        font-weight: 700;
-        padding: 2px 6px;
-        border: 1px solid #86efac;
-        font-size: 0.7rem;
-        display: inline-block;
-    }
-    .batch-status-disease {
-        background: #fee2e2;
-        color: #b91c1c;
-        font-weight: 700;
-        padding: 2px 6px;
-        border: 1px solid #fca5a5;
-        font-size: 0.7rem;
-        display: inline-block;
-    }
-    .batch-divider {
-        background: #0f172a;
-        color: #ffffff;
-        padding: 8px 12px;
-        font-size: 0.82rem;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        margin: 24px 0 14px 0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    .batch-divider-tag {
-        background: #16a34a;
-        color: #ffffff;
-        padding: 2px 8px;
-        font-size: 0.7rem;
-        font-weight: 800;
-    }
-
     /* Footer */
     .app-footer {
         text-align: center;
@@ -1112,66 +1030,29 @@ input_source = st.radio(
     label_visibility="collapsed"
 )
 
-# Sesi Galeri untuk menampung gambar (Mendukung upload batch maupun penambahan berkas bertahap)
-if "session_gallery" not in st.session_state:
-    st.session_state["session_gallery"] = []
+# ---------- Input Foto Tunggal (Galeri / Kamera) ----------
+target_img = None
+target_name = ""
 
-# 1. Jika sumber adalah Kamera Smartphone
 if "Kamera" in input_source:
     st.caption("Arahkan kamera smartphone ke daun yang bergejala sakit, lalu tekan tombol ambil foto.")
     cam_file = st.camera_input("Arahkan kamera ke daun tanaman", label_visibility="collapsed")
     if cam_file is not None:
-        c_bytes = cam_file.getvalue()
-        c_sig = f"cam_{len(c_bytes)}_{hash(c_bytes)}"
-        if not any(item["sig"] == c_sig for item in st.session_state["session_gallery"]):
-            try:
-                c_img = Image.open(io.BytesIO(c_bytes)).convert("RGB")
-                st.session_state["session_gallery"].append({
-                    "name": f"Kamera #{len(st.session_state['session_gallery']) + 1}",
-                    "image": c_img,
-                    "sig": c_sig
-                })
-            except Exception:
-                pass
+        target_img = Image.open(cam_file).convert("RGB")
+        target_name = "Foto Kamera Langsung"
 else:
-    # 2. Jika sumber adalah Upload Berkas / Galeri
-    uploaded_files = st.file_uploader(
-        "Pilih atau seret foto daun (Format: JPG, JPEG, PNG):",
+    uploaded_file = st.file_uploader(
+        "Pilih atau seret 1 foto daun (Format: JPG, JPEG, PNG):",
         type=["jpg", "jpeg", "png"],
-        accept_multiple_files=True
+        accept_multiple_files=False
     )
-    st.caption("💡 **Mendukung Multi-Upload:** Anda dapat memilih banyak foto sekaligus di jendela berkas, atau mengunggah beberapa foto secara bertahap. Seluruh foto tersimpan di antrean galeri.")
-    if uploaded_files:
-        for f in uploaded_files:
-            f_bytes = f.getvalue()
-            f_sig = f"{f.name}_{len(f_bytes)}"
-            if not any(item["sig"] == f_sig for item in st.session_state["session_gallery"]):
-                try:
-                    f_img = Image.open(io.BytesIO(f_bytes)).convert("RGB")
-                    st.session_state["session_gallery"].append({
-                        "name": f.name,
-                        "image": f_img,
-                        "sig": f_sig
-                    })
-                except Exception:
-                    pass
-
-# Tombol kontrol galeri jika sudah ada sampel terunggah
-if st.session_state["session_gallery"]:
-    c_info, c_clr = st.columns([3, 1])
-    with c_info:
-        st.markdown(f"""
-        <div style="font-size:0.82rem; font-weight:700; color:#166534; padding:6px 0;">
-            📁 <b>{len(st.session_state['session_gallery'])} Sampel Daun Aktif</b> dalam antrean analisis RimboAI.
-        </div>
-        """, unsafe_allow_html=True)
-    with c_clr:
-        if st.button("🗑️ Reset Galeri", key="clear_all_samples", help="Kosongkan seluruh foto daun dan mulai baru", use_container_width=True):
-            st.session_state["session_gallery"] = []
-            st.rerun()
+    st.caption("💡 Unggah 1 foto daun tanaman yang ingin diidentifikasi varietas dan didiagnosa patogen penyakitnya.")
+    if uploaded_file is not None:
+        target_img = Image.open(uploaded_file).convert("RGB")
+        target_name = uploaded_file.name
 
 # ---------- Tampilan Awal (Belum Ada Gambar Dipilih) ----------
-if not st.session_state["session_gallery"]:
+if target_img is None:
     st.markdown("""
     <div class="sec-header">
         <div class="sec-bar"></div>
@@ -1240,282 +1121,152 @@ if not st.session_state["session_gallery"]:
     """, unsafe_allow_html=True)
     st.stop()
 
-# ---------- Fungsi Render Diagnosa & XAI Per Daun ----------
-def render_leaf_detail(item: dict, sample_idx: int, total_samples: int):
-    orig = item["image"]
-    up_name = item["name"]
-    report_id = item.get("report_id", f"RBO-{str(uuid.uuid4())[:6].upper()}")
-    item["report_id"] = report_id
+# ---------- Proses Inferensi Gambar Tunggal ----------
+report_id = f"RBO-{str(uuid.uuid4())[:6].upper()}"
+timestamp = datetime.datetime.now().strftime("%d %b %Y, %H:%M WIB")
 
-    arr = preprocess_pil(orig, (img_size_sel, img_size_sel))
-    batch = np.expand_dims(arr, axis=0).astype("float32")
+arr = preprocess_pil(target_img, (img_size_sel, img_size_sel))
+batch = np.expand_dims(arr, axis=0).astype("float32")
 
-    t_start = datetime.datetime.now()
-    try:
-        plant_logits, disease_logits = model(batch, training=False)
-    except Exception:
-        outs = model(batch, training=False)
-        plant_logits, disease_logits = outs[0], outs[1]
-    t_end = datetime.datetime.now()
-    infer_ms = (t_end - t_start).total_seconds() * 1000.0
+t_start = datetime.datetime.now()
+try:
+    plant_logits, disease_logits = model(batch, training=False)
+except Exception:
+    outs = model(batch, training=False)
+    plant_logits, disease_logits = outs[0], outs[1]
+t_end = datetime.datetime.now()
+infer_ms = (t_end - t_start).total_seconds() * 1000.0
 
-    p_probs = ensure_softmax(np.array(plant_logits))
-    d_probs = ensure_softmax(np.array(disease_logits))
-    p_idx = int(np.argmax(p_probs[0]))
-    d_idx = int(np.argmax(d_probs[0]))
-    p_lbl = plant_labels[p_idx] if p_idx < len(plant_labels) else f"class_{p_idx}"
-    d_lbl = disease_labels[d_idx] if d_idx < len(disease_labels) else f"class_{d_idx}"
-    p_conf = float(p_probs[0][p_idx] * 100)
-    d_conf = float(d_probs[0][d_idx] * 100)
-    is_healthy = "healthy" in d_lbl.lower()
-    p_name_id = get_plant_name_id(p_lbl)
-    d_info = get_disease_details(d_lbl)
-    d_name_id = d_info.get("nama_id", d_lbl)
+p_probs = ensure_softmax(np.array(plant_logits))
+d_probs = ensure_softmax(np.array(disease_logits))
+p_idx = int(np.argmax(p_probs[0]))
+d_idx = int(np.argmax(d_probs[0]))
+p_lbl = plant_labels[p_idx] if p_idx < len(plant_labels) else f"class_{p_idx}"
+d_lbl = disease_labels[d_idx] if d_idx < len(disease_labels) else f"class_{d_idx}"
+p_conf = float(p_probs[0][p_idx] * 100)
+d_conf = float(d_probs[0][d_idx] * 100)
+is_healthy = "healthy" in d_lbl.lower()
+p_name_id = get_plant_name_id(p_lbl)
+d_info = get_disease_details(d_lbl)
+d_name_id = d_info.get("nama_id", d_lbl)
 
-    # Simpan hasil untuk ringkasan batch
-    item["p_name_id"] = p_name_id
-    item["d_name_id"] = d_name_id
-    item["p_lbl"] = p_lbl
-    item["d_lbl"] = d_lbl
-    item["p_conf"] = p_conf
-    item["d_conf"] = d_conf
-    item["is_healthy"] = is_healthy
-
-    # Kartu Hasil Diagnosa (Mobile Layout) — Dilengkapi Nama Bahasa Indonesia
-    st.markdown(f"""
-    <div class="result-card">
-        <div class="result-top">
-            <div class="result-title">HASIL DIAGNOSA: {up_name}</div>
-            <div class="result-id">ID: {report_id} • {infer_ms:.0f} ms</div>
-        </div>
-        <div class="result-body">
-            <div class="result-metrics">
-                <div class="metric-cell">
-                    <div class="cell-label">Varietas Tanaman</div>
-                    <div class="cell-val">{p_name_id}</div>
-                    <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{p_lbl}</i></div>
-                    <span class="cell-pill pill-green">
-                        Akurasi: {p_conf:.1f}%
-                    </span>
-                </div>
-                <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
-                    <div class="cell-label">Diagnosa Patogen</div>
-                    <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_name_id}</div>
-                    <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{d_lbl}</i></div>
-                    <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
-                        {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • {d_conf:.1f}%
-                    </span>
-                </div>
+# Kartu Hasil Diagnosa (Mobile Layout) — Dilengkapi Nama Bahasa Indonesia
+st.markdown(f"""
+<div class="result-card">
+    <div class="result-top">
+        <div class="result-title">HASIL DIAGNOSA: {target_name}</div>
+        <div class="result-id">ID: {report_id} • {infer_ms:.0f} ms</div>
+    </div>
+    <div class="result-body">
+        <div class="result-metrics">
+            <div class="metric-cell">
+                <div class="cell-label">Varietas Tanaman</div>
+                <div class="cell-val">{p_name_id}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{p_lbl}</i></div>
+                <span class="cell-pill pill-green">
+                    Akurasi: {p_conf:.1f}%
+                </span>
+            </div>
+            <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
+                <div class="cell-label">Diagnosa Patogen</div>
+                <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_name_id}</div>
+                <div style="font-size:0.75rem; color:#64748b; margin-top:-2px; margin-bottom:4px;"><i>{d_lbl}</i></div>
+                <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
+                    {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • {d_conf:.1f}%
+                </span>
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
-    # Protokol Resep Pengendalian Fitopatologi
-    rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
+# Protokol Resep Pengendalian Fitopatologi
+rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
 
-    st.markdown(f"""
-    <div class="rx-card">
-        <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
-        <div class="rx-section">
-            <div class="rx-caption">Nama Penyakit & Penyebab</div>
-            <div class="rx-val"><b>{d_info['nama_id']}</b> ({d_info['penyebab']})</div>
-        </div>
-        <div class="rx-section">
-            <div class="rx-caption">Karakteristik Gejala Lapangan</div>
-            <div class="rx-val">{d_info['gejala']}</div>
-        </div>
-        <div class="rx-action-box">
-            <div class="rx-caption" style="color: #15803d;">Tindakan Pengendalian Terpadu (PHT):</div>
-            {rx_items_html}
-        </div>
+st.markdown(f"""
+<div class="rx-card">
+    <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
+    <div class="rx-section">
+        <div class="rx-caption">Nama Penyakit & Penyebab</div>
+        <div class="rx-val"><b>{d_info['nama_id']}</b> ({d_info['penyebab']})</div>
     </div>
-    """, unsafe_allow_html=True)
-
-    # Studio Visualisasi Explainable AI (Dual-Perspective CAM)
-    st.markdown("""
-    <div class="sec-header">
-        <div class="sec-bar"></div>
-        <div class="sec-title">Studio Transparansi XAI (Dual-Perspective CAM)</div>
+    <div class="rx-section">
+        <div class="rx-caption">Karakteristik Gejala Lapangan</div>
+        <div class="rx-val">{d_info['gejala']}</div>
     </div>
-    <div class="xai-scale">
-        <span>🌿 Jaringan Sehat (Transparan)</span>
-        <div class="scale-bar"></div>
-        <span>🔥 Titik Fokus Infeksi / Morfologi</span>
+    <div class="rx-action-box">
+        <div class="rx-caption" style="color: #15803d;">Tindakan Pengendalian Terpadu (PHT):</div>
+        {rx_items_html}
     </div>
-    """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
-    acts, last_name, err = get_acts_safe(model, batch)
+# Studio Visualisasi Explainable AI (Dual-Perspective CAM)
+st.markdown("""
+<div class="sec-header">
+    <div class="sec-bar"></div>
+    <div class="sec-title">Studio Transparansi XAI (Dual-Perspective CAM)</div>
+</div>
+<div class="xai-scale">
+    <span>🌿 Jaringan Sehat (Transparan)</span>
+    <div class="scale-bar"></div>
+    <span>🔥 Titik Fokus Infeksi / Morfologi</span>
+</div>
+""", unsafe_allow_html=True)
 
-    if acts is not None:
-        heat_base = eigen_cam_from_acts(acts)
-        orig_np = np.asarray(orig.convert("RGB"))
-        plant_heat, disease_heat = compute_dual_cam(orig_np, heat_base)
+acts, last_name, err = get_acts_safe(model, batch)
 
-        tab_title_disease = f"🔬 XAI DIAGNOSA PENYAKIT (SAMPEL #{sample_idx+1})" if total_samples > 1 else "🔬 XAI DIAGNOSA PENYAKIT (FOKUS SPOT LESI)"
-        tab_title_plant = f"🌿 XAI VARIETAS TANAMAN (SAMPEL #{sample_idx+1})" if total_samples > 1 else "🌿 XAI VARIETAS TANAMAN (FOKUS MORFOLOGI DAUN)"
+if acts is not None:
+    heat_base = eigen_cam_from_acts(acts)
+    orig_np = np.asarray(target_img.convert("RGB"))
+    plant_heat, disease_heat = compute_dual_cam(orig_np, heat_base)
 
-        tab_disease, tab_plant = st.tabs([tab_title_disease, tab_title_plant])
+    tab_disease, tab_plant = st.tabs([
+        "🔬 XAI DIAGNOSA PENYAKIT (FOKUS SPOT LESI)",
+        "🌿 XAI VARIETAS TANAMAN (FOKUS MORFOLOGI DAUN)"
+    ])
 
-        with tab_disease:
-            st.caption("🔥 **Fokus Patogen Penyakit:** Mengisolasi bercak nekrotik, klorosis, dan spot infeksi aktif pada permukaan helai daun.")
-            d_heat_gray = make_grayscale_heatmap(disease_heat, orig)
-            d_overlay = overlay_heatmap_on_img(orig, disease_heat, alpha=alpha, cutoff=cam_cutoff)
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.image(orig, caption="Ori (Foto Asli)", use_container_width=True)
-            with c2:
-                st.image(d_heat_gray, caption="Heat (Peta Lesi)", use_container_width=True)
-            with c3:
-                st.image(d_overlay, caption="Overlay (Visual Bercak)", use_container_width=True)
-
-        with tab_plant:
-            st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti garis pertulangan daun, kontur batas tepi daun, dan siluet morfologi komoditas.")
-            p_heat_gray = make_grayscale_heatmap(plant_heat, orig)
-            p_overlay = overlay_heatmap_on_img(orig, plant_heat, alpha=alpha, cutoff=0.0)
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.image(orig, caption="Ori (Foto Asli)", use_container_width=True)
-            with c2:
-                st.image(p_heat_gray, caption="Heat (Garis & Siluet Daun)", use_container_width=True)
-            with c3:
-                st.image(p_overlay, caption="Overlay (Visual Anatomi)", use_container_width=True)
-    else:
-        st.warning(f"EigenCAM belum dapat dirender: {err}")
-        st.image(orig, caption="Foto Daun Asli", use_container_width=True)
-
-    # Matriks Probabilitas Top-K
-    expander_title = f"📊 Matriks Probabilitas Lengkap — Sampel #{sample_idx+1} ({up_name})" if total_samples > 1 else "📊 Matriks Probabilitas Lengkap (Top-K)"
-    with st.expander(expander_title, expanded=False):
-        c1, c2 = st.columns(2)
+    with tab_disease:
+        st.caption("🔥 **Fokus Patogen Penyakit:** Mengisolasi bercak nekrotik, klorosis, dan spot infeksi aktif pada permukaan helai daun.")
+        d_heat_gray = make_grayscale_heatmap(disease_heat, target_img)
+        d_overlay = overlay_heatmap_on_img(target_img, disease_heat, alpha=alpha, cutoff=cam_cutoff)
+        c1, c2, c3 = st.columns(3)
         with c1:
-            st.markdown("**Komoditas Tanaman**")
-            for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
-                id_name = get_plant_name_id(lbl)
-                st.progress(p, text=f"{id_name} ({lbl}): {p*100:.1f}%")
+            st.image(target_img, caption="Ori (Foto Asli)", use_container_width=True)
         with c2:
-            st.markdown("**Dugaan Penyakit**")
-            for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
-                d_detail = get_disease_details(lbl)
-                d_id = d_detail.get('nama_id', lbl)
-                st.progress(p, text=f"{d_id}: {p*100:.1f}%")
+            st.image(d_heat_gray, caption="Heat (Peta Lesi)", use_container_width=True)
+        with c3:
+            st.image(d_overlay, caption="Overlay (Visual Bercak)", use_container_width=True)
 
-    st.markdown("---")
-
-# ---------- Alur Pemrosesan Galeri Sampel ----------
-total_samples = len(st.session_state["session_gallery"])
-
-if total_samples > 1:
-    # 1. Pra-komputasi cepat untuk seluruh sampel agar tabel ringkasan langsung terisi lengkap
-    for idx, it in enumerate(st.session_state["session_gallery"]):
-        if "p_name_id" not in it:
-            arr_q = preprocess_pil(it["image"], (img_size_sel, img_size_sel))
-            b_q = np.expand_dims(arr_q, axis=0).astype("float32")
-            try:
-                p_l, d_l = model(b_q, training=False)
-            except Exception:
-                outs = model(b_q, training=False)
-                p_l, d_l = outs[0], outs[1]
-            p_p = ensure_softmax(np.array(p_l))[0]
-            d_p = ensure_softmax(np.array(d_l))[0]
-            p_i = int(np.argmax(p_p))
-            d_i = int(np.argmax(d_p))
-            p_lbl_q = plant_labels[p_i] if p_i < len(plant_labels) else f"class_{p_i}"
-            d_lbl_q = disease_labels[d_i] if d_i < len(disease_labels) else f"class_{d_i}"
-            it["p_name_id"] = get_plant_name_id(p_lbl_q)
-            it["d_name_id"] = get_disease_details(d_lbl_q).get("nama_id", d_lbl_q)
-            it["p_lbl"] = p_lbl_q
-            it["d_lbl"] = d_lbl_q
-            it["p_conf"] = float(p_p[p_i] * 100)
-            it["d_conf"] = float(d_p[d_i] * 100)
-            it["is_healthy"] = "healthy" in d_lbl_q.lower()
-
-    # Tabel Ringkasan Diagnosa Batch (Seluruh Foto Terunggah Ditampilkan Di Sini)
-    rows_html = ""
-    for idx, it in enumerate(st.session_state["session_gallery"]):
-        badge = f'<span class="batch-status-healthy">Sehat ({it["disease_conf"]:.1f}%)</span>' if it["is_healthy"] else f'<span class="batch-status-disease">Terinfeksi ({it["disease_conf"]:.1f}%)</span>'
-        rows_html += f"""
-        <tr>
-            <td style="font-weight:800; text-align:center;">#{idx+1}</td>
-            <td><b>{it['name']}</b></td>
-            <td>{it['p_name_id']} <span style="font-size:0.7rem; color:#64748b;">({it['p_conf']:.1f}%)</span></td>
-            <td><b>{it['d_name_id']}</b></td>
-            <td>{badge}</td>
-        </tr>
-        """
-
-    st.markdown(f"""
-    <div class="batch-summary-box">
-        <div class="batch-summary-title">
-            <span>📑</span>
-            <span>RINGKASAN BATCH: {total_samples} FOTO DAUN BERHASIL DIANALISIS</span>
-        </div>
-        <table class="batch-table">
-            <thead>
-                <tr>
-                    <th style="width:45px; text-align:center;">No</th>
-                    <th>Nama Berkas</th>
-                    <th>Varietas Tanaman</th>
-                    <th>Diagnosa Patogen</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {rows_html}
-            </tbody>
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 2. Pengatur Mode Tampilan & Selector Sampel
-    st.markdown("""
-    <div class="sec-header">
-        <div class="sec-bar"></div>
-        <div class="sec-title">Pilih Sampel Daun untuk Inspeksi Rinci & XAI</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    sample_opts = [
-        f"🍃 Sampel #{i+1}: {it['name'][:16]} ({it['p_name_id']})"
-        for i, it in enumerate(st.session_state["session_gallery"])
-    ]
-
-    col_sel, col_mode = st.columns([3, 2])
-    with col_sel:
-        active_sample_idx = st.radio(
-            "Pilih Sampel Daun:",
-            range(total_samples),
-            format_func=lambda i: sample_opts[i],
-            horizontal=True,
-            key="leaf_sample_picker",
-            label_visibility="collapsed"
-        )
-    with col_mode:
-        view_mode = st.radio(
-            "Mode Tampilan:",
-            ["🔍 Fokus Daun Terpilih", "📑 Tampilkan Semua Sekaligus"],
-            index=0,
-            horizontal=True,
-            key="leaf_view_mode",
-            label_visibility="collapsed"
-        )
-
-    if view_mode == "🔍 Fokus Daun Terpilih":
-        # Tampilkan hanya sampel yang dipilih (Bersih, fokus, tanpa scroll berlebihan)
-        render_leaf_detail(st.session_state["session_gallery"][active_sample_idx], active_sample_idx, total_samples)
-    else:
-        # Tampilkan seluruh sampel berurutan dengan pembatas tegas
-        for idx, item in enumerate(st.session_state["session_gallery"]):
-            st.markdown(f"""
-            <div class="batch-divider">
-                <span>🍃 SAMPEL #{idx+1} DARI {total_samples}: <b>{item['name']}</b></span>
-                <span class="batch-divider-tag">{item['p_name_id']} • {item['d_name_id']}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            render_leaf_detail(item, idx, total_samples)
+    with tab_plant:
+        st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti garis pertulangan daun, kontur batas tepi daun, dan siluet morfologi komoditas.")
+        p_heat_gray = make_grayscale_heatmap(plant_heat, target_img)
+        p_overlay = overlay_heatmap_on_img(target_img, plant_heat, alpha=alpha, cutoff=0.0)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.image(target_img, caption="Ori (Foto Asli)", use_container_width=True)
+        with c2:
+            st.image(p_heat_gray, caption="Heat (Garis & Siluet Daun)", use_container_width=True)
+        with c3:
+            st.image(p_overlay, caption="Overlay (Visual Anatomi)", use_container_width=True)
 else:
-    # Hanya 1 sampel daun dalam galeri
-    render_leaf_detail(st.session_state["session_gallery"][0], 0, 1)
+    st.warning(f"EigenCAM belum dapat dirender: {err}")
+    st.image(target_img, caption="Foto Daun Asli", use_container_width=True)
+
+# Matriks Probabilitas Top-K
+with st.expander("📊 Matriks Probabilitas Lengkap (Top-K)", expanded=False):
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("**Komoditas Tanaman**")
+        for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
+            id_name = get_plant_name_id(lbl)
+            st.progress(p, text=f"{id_name} ({lbl}): {p*100:.1f}%")
+    with c2:
+        st.markdown("**Dugaan Penyakit**")
+        for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
+            d_detail = get_disease_details(lbl)
+            d_id = d_detail.get('nama_id', lbl)
+            st.progress(p, text=f"{d_id}: {p*100:.1f}%")
 
 st.markdown("""
 <div class="app-footer">
