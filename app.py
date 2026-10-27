@@ -252,6 +252,34 @@ st.markdown("""
         border-color: #16a34a !important;
         background: #f0fdf4 !important;
     }
+    /* Sembunyikan ikon '+' atau tombol penambahan file berlebih pada file uploader agar murni 1 file */
+    div[data-testid="stFileUploader"] section button[aria-label*="Add"],
+    div[data-testid="stFileUploader"] section button[aria-label*="upload"],
+    div[data-testid="stFileUploader"] section svg[data-icon="plus"],
+    div[data-testid="stFileUploader"] section [data-testid="stFileUploaderPagination"] {
+        display: none !important;
+    }
+    .active-photo-box {
+        background: #ffffff;
+        border: 1.5px solid #cbd5e1;
+        border-left: 4px solid #16a34a;
+        padding: 12px 14px;
+        margin: 12px 0 10px 0;
+    }
+    .active-photo-title {
+        font-size: 0.84rem;
+        font-weight: 800;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .active-photo-sub {
+        font-size: 0.72rem;
+        color: #64748b;
+        margin-top: 2px;
+        font-weight: 600;
+    }
     div[data-testid="stCameraInput"] {
         border: 2px solid #16a34a !important;
         background: #ffffff !important;
@@ -1014,42 +1042,75 @@ with st.sidebar:
     st.markdown("---")
     st.caption("🤖 **Arsitektur:** NasNetMobile Dual-Head  \n🔬 **Metode XAI:** Eigen-CAM (SVD Activation)  \n🌱 **Cakupan:** 10 Tanaman & 24 Patogen")
 
-# ---------- Mobile Input Selector: Upload Galeri vs Kamera Smartphone ----------
-st.markdown("""
-<div class="sec-header">
-    <div class="sec-bar"></div>
-    <div class="sec-title">Pilih Sumber Foto Daun</div>
-</div>
-""", unsafe_allow_html=True)
+# ---------- State Management Foto Tunggal & Reset Uploader ----------
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = 0
+if "active_photo" not in st.session_state:
+    st.session_state["active_photo"] = None
+if "active_name" not in st.session_state:
+    st.session_state["active_name"] = ""
 
-input_source = st.radio(
-    "Pilih Sumber Foto:",
-    ["📁 Upload Berkas / Galeri", "📷 Kamera Smartphone Langsung"],
-    index=0,
-    horizontal=True,
-    label_visibility="collapsed"
-)
+# Jika belum ada foto aktif: Tampilkan Pemilih Sumber & Kotak Upload Tunggal
+if st.session_state["active_photo"] is None:
+    st.markdown("""
+    <div class="sec-header">
+        <div class="sec-bar"></div>
+        <div class="sec-title">Pilih Sumber Foto Daun</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ---------- Input Foto Tunggal (Galeri / Kamera) ----------
-target_img = None
-target_name = ""
-
-if "Kamera" in input_source:
-    st.caption("Arahkan kamera smartphone ke daun yang bergejala sakit, lalu tekan tombol ambil foto.")
-    cam_file = st.camera_input("Arahkan kamera ke daun tanaman", label_visibility="collapsed")
-    if cam_file is not None:
-        target_img = Image.open(cam_file).convert("RGB")
-        target_name = "Foto Kamera Langsung"
-else:
-    uploaded_file = st.file_uploader(
-        "Pilih atau seret 1 foto daun (Format: JPG, JPEG, PNG):",
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=False
+    input_source = st.radio(
+        "Pilih Sumber Foto:",
+        ["📁 Upload Berkas / Galeri", "📷 Kamera Smartphone Langsung"],
+        index=0,
+        horizontal=True,
+        label_visibility="collapsed",
+        key=f"src_{st.session_state['uploader_key']}"
     )
-    st.caption("💡 Unggah 1 foto daun tanaman yang ingin diidentifikasi varietas dan didiagnosa patogen penyakitnya.")
-    if uploaded_file is not None:
-        target_img = Image.open(uploaded_file).convert("RGB")
-        target_name = uploaded_file.name
+
+    if "Kamera" in input_source:
+        st.caption("Arahkan kamera smartphone ke daun yang bergejala sakit, lalu tekan tombol ambil foto.")
+        cam_file = st.camera_input(
+            "Arahkan kamera ke daun tanaman",
+            label_visibility="collapsed",
+            key=f"cam_{st.session_state['uploader_key']}"
+        )
+        if cam_file is not None:
+            st.session_state["active_photo"] = Image.open(cam_file).convert("RGB")
+            st.session_state["active_name"] = "Foto Kamera Langsung"
+            st.rerun()
+    else:
+        uploaded_file = st.file_uploader(
+            "Pilih atau seret 1 foto daun (Format: JPG, JPEG, PNG):",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=False,
+            key=f"file_{st.session_state['uploader_key']}"
+        )
+        st.caption("💡 Unggah 1 foto daun tanaman yang ingin diidentifikasi varietas dan didiagnosa patogen penyakitnya.")
+        if uploaded_file is not None:
+            st.session_state["active_photo"] = Image.open(uploaded_file).convert("RGB")
+            st.session_state["active_name"] = uploaded_file.name
+            st.rerun()
+else:
+    # Foto sudah aktif: Sembunyikan uploader dan tampilkan status foto aktif + tombol upload ulang
+    st.markdown(f"""
+    <div class="active-photo-box">
+        <div class="active-photo-title">
+            <span style="color:#16a34a; font-size:1.1rem;">🌿</span>
+            <span>Foto Daun Aktif: <b>{st.session_state['active_name']}</b></span>
+        </div>
+        <div class="active-photo-sub">1 Foto daun sedang dianalisis. Tekan tombol di bawah untuk menghapus dan mengunggah ulang foto lain.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("🔄 Ganti Foto / Upload Ulang Daun Baru", key="btn_reupload", use_container_width=True):
+        st.session_state["active_photo"] = None
+        st.session_state["active_name"] = ""
+        st.session_state["uploader_key"] += 1
+        st.rerun()
+
+target_img = st.session_state["active_photo"]
+target_name = st.session_state["active_name"]
 
 # ---------- Tampilan Awal (Belum Ada Gambar Dipilih) ----------
 if target_img is None:
@@ -1267,6 +1328,13 @@ with st.expander("📊 Matriks Probabilitas Lengkap (Top-K)", expanded=False):
             d_detail = get_disease_details(lbl)
             d_id = d_detail.get('nama_id', lbl)
             st.progress(p, text=f"{d_id}: {p*100:.1f}%")
+
+st.markdown("---")
+if st.button("🔄 Uji Daun Lain (Hapus & Upload Ulang)", key="btn_bottom_reupload", use_container_width=True):
+    st.session_state["active_photo"] = None
+    st.session_state["active_name"] = ""
+    st.session_state["uploader_key"] += 1
+    st.rerun()
 
 st.markdown("""
 <div class="app-footer">
