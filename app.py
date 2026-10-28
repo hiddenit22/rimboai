@@ -706,6 +706,65 @@ st.markdown("""
         line-height: 1.6;
     }
 
+    /* Invalid Leaf Card (Square Geometry) */
+    .invalid-card {
+        background: #ffffff;
+        border: 2px solid #ef4444;
+        border-radius: 0px !important;
+        box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.15);
+        margin-bottom: 16px;
+        overflow: hidden;
+    }
+    .invalid-top {
+        background: #fee2e2;
+        border-bottom: 1.5px solid #f87171;
+        padding: 10px 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .invalid-title {
+        color: #991b1b;
+        font-size: 0.88rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+    }
+    .invalid-id {
+        font-size: 0.72rem;
+        color: #b91c1c;
+        font-weight: 700;
+    }
+    .invalid-body {
+        padding: 14px;
+        font-size: 0.84rem;
+        color: #1e293b;
+        line-height: 1.55;
+    }
+    .invalid-reason {
+        background: #fef2f2;
+        border-left: 3.5px solid #ef4444;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        color: #7f1d1d;
+        font-size: 0.82rem;
+    }
+    .invalid-guide {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 12px 14px;
+        color: #334155;
+        font-size: 0.80rem;
+    }
+    .invalid-guide ul {
+        margin: 6px 0 0 16px;
+        padding: 0;
+    }
+    .invalid-guide li {
+        margin-bottom: 4px;
+    }
+
     /* Footer */
     .app-footer {
         text-align: center;
@@ -875,6 +934,45 @@ def get_leaf_mask(orig_rgb: np.ndarray) -> np.ndarray:
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     mask = cv2.dilate(mask, kernel, iterations=2)
     return mask
+
+def check_leaf_validity(rgb_np: np.ndarray, p_conf: float) -> Tuple[bool, str]:
+    """
+    Validasi dua lapis (dual-gate) untuk menyaring citra non-daun / out-of-distribution (OOD).
+    Menganalisis pigmen klorofil/karotenoid (ruang warna HSV) dan margin keyakinan model CNN.
+    """
+    hsv = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2HSV)
+    H = hsv[:, :, 0]
+    S = hsv[:, :, 1]
+    V = hsv[:, :, 2]
+    
+    # Spektrum pigmen klorofil hijau alami (H: 25-95, S >= 25, V >= 25)
+    green_mask = (H >= 25) & (H <= 95) & (S >= 25) & (V >= 25)
+    # Spektrum klorosis / lesi kuning (H: 15-25, S >= 35, V >= 35)
+    yellow_mask = (H >= 15) & (H < 25) & (S >= 35) & (V >= 35)
+    # Spektrum lesi nekrotik cokelat pada helai daun (H: 8-22, S >= 30, V >= 25, V <= 200)
+    brown_mask = (H >= 8) & (H < 22) & (S >= 30) & (V >= 25) & (V <= 200)
+    
+    veg_mask = green_mask | yellow_mask | brown_mask
+    veg_ratio = float(veg_mask.mean())
+    low_sat_ratio = float((S < 20).mean())
+    
+    # 1. Ketiadaan pigmen atau jaringan daun
+    if veg_ratio < 0.025 and p_conf < 55.0:
+        return False, "Citra tidak terdeteksi memiliki pigmen klorofil atau jaringan daun tanaman (bukan objek botani). Objek terindikasi berupa wajah/manusia, hewan, perabotan, kendaraan, atau benda mati."
+    
+    # 2. Pigmentasi vegetasi sangat minim dengan kepastian marjinal
+    if veg_ratio < 0.06 and p_conf < 38.0:
+        return False, "Karakteristik visual objek tidak memenuhi kriteria helai daun tanaman. Tingkat keyakinan model marjinal dan pigmen vegetasi tidak signifikan."
+    
+    # 3. Model sangat tidak yakin (< 25%)
+    if p_conf < 25.0:
+        return False, f"Tingkat keyakinan model terhadap varietas tanaman sangat rendah ({p_conf:.1f}%). Citra tidak dapat diidentifikasi secara valid sebagai salah satu dari 10 komoditas daun terdaftar."
+    
+    # 4. Citra monokromatik / dokumen teks / kertas
+    if low_sat_ratio > 0.88 and p_conf < 65.0:
+        return False, "Citra terdeteksi monokromatik atau berupa dokumen teks/kertas tanpa pigmen vegetasi alami daun."
+        
+    return True, "Valid"
 
 def overlay_heatmap_on_img(orig_img: Image.Image, heat01: np.ndarray, alpha: float = 0.45, cutoff: float = 0.0) -> Image.Image:
     orig = np.asarray(orig_img.convert("RGB")).astype(np.float32)
@@ -1057,14 +1155,29 @@ Model AI deep learning (NasNetMobile) menganalisis foto daun tanaman terlampir d
 - Diagnosa Patogen/Penyakit: {d_lbl} (Kepercayaan CNN: {d_conf:.1f}%)
   Kandidat Alternatif: {d_alts or 'Tidak ada'}
 
-Tugas Anda:
-Lakukan penalaran visual mendalam pada helai daun di gambar:
+TUGAS UTAMA:
+Langkah 0 - Verifikasi Keabsahan Objek (PENTING):
+Periksa terlebih dahulu apakah foto yang dilampirkan benar-benar merupakan HELAI DAUN TANAMAN.
+Jika foto berupa manusia (wajah/anggota tubuh), hewan, kendaraan, perabotan, dokumen/teks, atau objek non-daun:
+Format Jawaban Khusus Objek Non-Daun:
+**Status Verifikasi:** GAMBAR TIDAK VALID - BUKAN DAUN TANAMAN
+**Diagnosa Akhir Pakar:** Objek Bukan Daun Tanaman
+**Tingkat Keyakinan:** Tinggi
+
+#### 🔍 Analisis Gejala Visual:
+Objek yang tampak pada citra adalah [sebutkan objek sebenarnya, misal: wajah manusia / dokumen / benda mati], bukan helai daun tanaman. Sistem RimboAI dirancang khusus untuk diagnosis patologi daun tanaman.
+
+#### 🩺 Rekomendasi Tindakan Cepat:
+- Silakan ambil atau unggah foto helai daun tanaman segar atau yang bergejala sakit.
+- Pastikan helai daun berada di tengah frame kamera dengan pencahayaan terang alami.
+
+Jika foto BENAR merupakan HELAI DAUN TANAMAN, lakukan analisis fitopatologi penuh:
 1. Analisis Fitur Visual: Periksa bentuk bercak, pola tepi lesi (menyebar/tegas), warna (klorosis/nekrotik), urat daun, dan siluet helai daun.
 2. Kesimpulan Verifikasi: 
    - Tentukan apakah Anda SETUJU dengan diagnosa model CNN ({d_lbl} pada {p_lbl}) atau memiliki DIAGNOSA ALTERNATIF (misal: penyakit jamur/bakteri/virus lain, hama, atau defisiensi hara/fisiologis).
 3. Rekomendasi Lapangan Cepat: Berikan 2 tindakan terpadu yang paling mendesak dilakukan petani.
 
-Format Jawaban (Tuliskan langsung dalam format rapi ini):
+Format Jawaban Daun Valid:
 **Status Verifikasi:** [TERKONFIRMASI KONSISTEN atau DIAGNOSA KOREKSI]
 **Diagnosa Akhir Pakar:** [Nama Penyakit] pada [Nama Tanaman]
 **Tingkat Keyakinan:** [Tinggi / Sedang / Cukup]
@@ -1363,54 +1476,87 @@ d_conf = float(d_probs[0][d_idx] * 100)
 is_healthy = "healthy" in d_lbl.lower()
 d_info = get_disease_details(d_lbl)
 
-# Kartu Hasil Diagnosa (Mobile Layout)
-st.markdown(f"""
-<div class="result-card">
-    <div class="result-top">
-        <div class="result-title">HASIL DIAGNOSA: {target_name}</div>
-        <div class="result-id">ID: {report_id} • {infer_ms:.0f} ms</div>
-    </div>
-    <div class="result-body">
-        <div class="result-metrics">
-            <div class="metric-cell">
-                <div class="cell-label">Varietas Tanaman</div>
-                <div class="cell-val">{p_lbl}</div>
-                <span class="cell-pill pill-green">
-                    Akurasi: {p_conf:.1f}%
-                </span>
+# Validasi Keabsahan Objek Daun (Dual-Gate Filter)
+orig_np = np.asarray(target_img.convert("RGB"))
+is_valid_leaf, invalid_reason = check_leaf_validity(orig_np, p_conf)
+
+if not is_valid_leaf:
+    # Tampilkan Kartu Peringatan Citra Tidak Valid
+    st.markdown(f"""
+    <div class="invalid-card">
+        <div class="invalid-top">
+            <div class="invalid-title">⚠️ OBJEK BUKAN DAUN TANAMAN / CITRA TIDAK VALID</div>
+            <div class="invalid-id">ID: {report_id} • {infer_ms:.0f} ms</div>
+        </div>
+        <div class="invalid-body">
+            <div class="invalid-reason">
+                <b>Peringatan Sistem:</b> {invalid_reason}
             </div>
-            <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
-                <div class="cell-label">Diagnosa Patogen</div>
-                <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_lbl}</div>
-                <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
-                    {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • {d_conf:.1f}%
-                </span>
+            <div class="invalid-guide">
+                <b>Panduan Pemotretan Daun yang Valid:</b>
+                <ul>
+                    <li>Pastikan objek foto adalah <b>helai daun tanaman</b> (bukan manusia, hewan, perabotan, dokumen, atau benda mati).</li>
+                    <li>Dekatkan lensa kamera 15–30 cm ke helai daun agar urat dan bercak daun tampak tajam.</li>
+                    <li>Gunakan pencahayaan alami yang cukup terang dan hindari bayangan tebal atau blur.</li>
+                </ul>
             </div>
         </div>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+    
+    with st.expander("🔍 Lihat Hasil Log Prediksi Mentah Model (Untuk Riset/Debug)", expanded=False):
+        st.caption("Catatan: Data di bawah ini adalah estimasi probabilitas mentah neural network terhadap citra yang ditandai tidak valid:")
+        st.write(f"- Estimasi Varietas Terdekat: **{p_lbl}** ({p_conf:.1f}%)")
+        st.write(f"- Estimasi Kondisi/Patogen: **{d_lbl}** ({d_conf:.1f}%)")
+else:
+    # Kartu Hasil Diagnosa (Mobile Layout)
+    st.markdown(f"""
+    <div class="result-card">
+        <div class="result-top">
+            <div class="result-title">HASIL DIAGNOSA: {target_name}</div>
+            <div class="result-id">ID: {report_id} • {infer_ms:.0f} ms</div>
+        </div>
+        <div class="result-body">
+            <div class="result-metrics">
+                <div class="metric-cell">
+                    <div class="cell-label">Varietas Tanaman</div>
+                    <div class="cell-val">{p_lbl}</div>
+                    <span class="cell-pill pill-green">
+                        Akurasi: {p_conf:.1f}%
+                    </span>
+                </div>
+                <div class="metric-cell {'metric-cell-healthy' if is_healthy else 'metric-cell-disease'}">
+                    <div class="cell-label">Diagnosa Patogen</div>
+                    <div class="cell-val" style="color: {'#15803d' if is_healthy else '#b91c1c'}; font-size:1.02rem;">{d_lbl}</div>
+                    <span class="cell-pill {'pill-green' if is_healthy else 'pill-red'}">
+                        {'Kondisi Sehat' if is_healthy else 'Terindikasi Infeksi'} • {d_conf:.1f}%
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Protokol Resep Pengendalian Fitopatologi
-rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
+    # Protokol Resep Pengendalian Fitopatologi
+    rx_items_html = "".join([f'<div class="rx-item"><span class="rx-marker">■</span><span>{step}</span></div>' for step in d_info['penanganan']])
 
-st.markdown(f"""
-<div class="rx-card">
-    <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
-    <div class="rx-section">
-        <div class="rx-caption">Penyakit & Patogen</div>
-        <div class="rx-val"><b>{d_lbl}</b> ({d_info['penyebab']})</div>
+    st.markdown(f"""
+    <div class="rx-card">
+        <div class="rx-header">🩺 Protokol Penanganan & Rekomendasi Agronomi</div>
+        <div class="rx-section">
+            <div class="rx-caption">Penyakit & Patogen</div>
+            <div class="rx-val"><b>{d_lbl}</b> ({d_info['penyebab']})</div>
+        </div>
+        <div class="rx-section">
+            <div class="rx-caption">Karakteristik Gejala Lapangan</div>
+            <div class="rx-val">{d_info['gejala']}</div>
+        </div>
+        <div class="rx-action-box">
+            <div class="rx-caption" style="color: #15803d;">Tindakan Pengendalian Terpadu (PHT):</div>
+            {rx_items_html}
+        </div>
     </div>
-    <div class="rx-section">
-        <div class="rx-caption">Karakteristik Gejala Lapangan</div>
-        <div class="rx-val">{d_info['gejala']}</div>
-    </div>
-    <div class="rx-action-box">
-        <div class="rx-caption" style="color: #15803d;">Tindakan Pengendalian Terpadu (PHT):</div>
-        {rx_items_html}
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 # ---------- Verifikasi Pakar (Second Opinion) ----------
 st.markdown("""
@@ -1482,68 +1628,76 @@ if st.session_state.get("gemini_result"):
     st.markdown("</div></div>", unsafe_allow_html=True)
 
 # Studio Visualisasi Explainable AI (Dual-Perspective CAM)
-st.markdown("""
-<div class="sec-header">
-    <div class="sec-bar"></div>
-    <div class="sec-title">Studio Transparansi XAI (Dual-Perspective CAM)</div>
-</div>
-<div class="xai-scale">
-    <span>🌿 Jaringan Sehat (Transparan)</span>
-    <div class="scale-bar"></div>
-    <span>🔥 Titik Fokus Infeksi / Morfologi</span>
-</div>
-""", unsafe_allow_html=True)
+if is_valid_leaf:
+    st.markdown("""
+    <div class="sec-header">
+        <div class="sec-bar"></div>
+        <div class="sec-title">Studio Transparansi XAI (Dual-Perspective CAM)</div>
+    </div>
+    <div class="xai-scale">
+        <span>🌿 Jaringan Sehat (Transparan)</span>
+        <div class="scale-bar"></div>
+        <span>🔥 Titik Fokus Infeksi / Morfologi</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-acts, last_name, err = get_acts_safe(model, batch)
+    acts, last_name, err = get_acts_safe(model, batch)
 
-if acts is not None:
-    heat_base = eigen_cam_from_acts(acts)
-    orig_np = np.asarray(target_img.convert("RGB"))
-    plant_heat, disease_heat = compute_dual_cam(orig_np, heat_base)
+    if acts is not None:
+        heat_base = eigen_cam_from_acts(acts)
+        plant_heat, disease_heat = compute_dual_cam(orig_np, heat_base)
 
-    tab_disease, tab_plant = st.tabs([
-        "🔬 XAI DIAGNOSA PENYAKIT (FOKUS SPOT LESI)",
-        "🌿 XAI VARIETAS TANAMAN (FOKUS MORFOLOGI DAUN)"
-    ])
+        tab_disease, tab_plant = st.tabs([
+            "🔬 XAI DIAGNOSA PENYAKIT (FOKUS SPOT LESI)",
+            "🌿 XAI VARIETAS TANAMAN (FOKUS MORFOLOGI DAUN)"
+        ])
 
-    with tab_disease:
-        st.caption("🔥 **Fokus Patogen Penyakit:** Mengisolasi bercak nekrotik, klorosis, dan spot infeksi aktif pada permukaan helai daun.")
-        d_heat_gray = make_grayscale_heatmap(disease_heat, target_img)
-        d_overlay = overlay_heatmap_on_img(target_img, disease_heat, alpha=alpha, cutoff=cam_cutoff)
-        c1, c2, c3 = st.columns(3)
+        with tab_disease:
+            st.caption("🔥 **Fokus Patogen Penyakit:** Mengisolasi bercak nekrotik, klorosis, dan spot infeksi aktif pada permukaan helai daun.")
+            d_heat_gray = make_grayscale_heatmap(disease_heat, target_img)
+            d_overlay = overlay_heatmap_on_img(target_img, disease_heat, alpha=alpha, cutoff=cam_cutoff)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.image(target_img, caption="Ori (Foto Asli)", use_container_width=True)
+            with c2:
+                st.image(d_heat_gray, caption="Heat (Peta Lesi)", use_container_width=True)
+            with c3:
+                st.image(d_overlay, caption="Overlay (Visual Bercak)", use_container_width=True)
+
+        with tab_plant:
+            st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti garis pertulangan daun, kontur batas tepi daun, dan siluet morfologi komoditas.")
+            p_heat_gray = make_grayscale_heatmap(plant_heat, target_img)
+            p_overlay = overlay_heatmap_on_img(target_img, plant_heat, alpha=alpha, cutoff=0.0)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.image(target_img, caption="Ori (Foto Asli)", use_container_width=True)
+            with c2:
+                st.image(p_heat_gray, caption="Heat (Garis & Siluet Daun)", use_container_width=True)
+            with c3:
+                st.image(p_overlay, caption="Overlay (Visual Anatomi)", use_container_width=True)
+    else:
+        st.warning(f"EigenCAM belum dapat dirender: {err}")
+        st.image(target_img, caption="Foto Daun Asli", use_container_width=True)
+
+    # Matriks Probabilitas Top-K
+    with st.expander("📊 Matriks Probabilitas Lengkap (Top-K)", expanded=False):
+        c1, c2 = st.columns(2)
         with c1:
-            st.image(target_img, caption="Ori (Foto Asli)", use_container_width=True)
+            st.markdown("**Komoditas Tanaman**")
+            for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
+                st.progress(p, text=f"{lbl}: {p*100:.1f}%")
         with c2:
-            st.image(d_heat_gray, caption="Heat (Peta Lesi)", use_container_width=True)
-        with c3:
-            st.image(d_overlay, caption="Overlay (Visual Bercak)", use_container_width=True)
-
-    with tab_plant:
-        st.caption("🌱 **Fokus Morfologi Tanaman:** Menyoroti garis pertulangan daun, kontur batas tepi daun, dan siluet morfologi komoditas.")
-        p_heat_gray = make_grayscale_heatmap(plant_heat, target_img)
-        p_overlay = overlay_heatmap_on_img(target_img, plant_heat, alpha=alpha, cutoff=0.0)
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.image(target_img, caption="Ori (Foto Asli)", use_container_width=True)
-        with c2:
-            st.image(p_heat_gray, caption="Heat (Garis & Siluet Daun)", use_container_width=True)
-        with c3:
-            st.image(p_overlay, caption="Overlay (Visual Anatomi)", use_container_width=True)
+            st.markdown("**Dugaan Penyakit**")
+            for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
+                st.progress(p, text=f"{lbl}: {p*100:.1f}%")
 else:
-    st.warning(f"EigenCAM belum dapat dirender: {err}")
-    st.image(target_img, caption="Foto Daun Asli", use_container_width=True)
-
-# Matriks Probabilitas Top-K
-with st.expander("📊 Matriks Probabilitas Lengkap (Top-K)", expanded=False):
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Komoditas Tanaman**")
-        for lbl, p in topk_list(p_probs[0], plant_labels, k=topk):
-            st.progress(p, text=f"{lbl}: {p*100:.1f}%")
-    with c2:
-        st.markdown("**Dugaan Penyakit**")
-        for lbl, p in topk_list(d_probs[0], disease_labels, k=topk):
-            st.progress(p, text=f"{lbl}: {p*100:.1f}%")
+    st.markdown("""
+    <div class="sec-header">
+        <div class="sec-bar" style="background:#ef4444;"></div>
+        <div class="sec-title">Studio Transparansi XAI</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.info("ℹ️ Visualisasi Heatmap Explainable AI (Eigen-CAM) dan matriks probabilitas dinonaktifkan karena citra terdeteksi bukan merupakan daun tanaman yang valid.")
 
 st.markdown("---")
 if st.button("🔄 Uji Daun Lain (Hapus & Upload Ulang)", key="btn_bottom_reupload", use_container_width=True):
